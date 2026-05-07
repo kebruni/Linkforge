@@ -4,7 +4,7 @@ Target host:
 
 | Field           | Value                       |
 | --------------- | --------------------------- |
-| Domain          | `together.kebruni.me`       |
+| Domain          | `linkforge.kebruni.me`       |
 | VPS IP          | `164.92.240.90`             |
 | SSH port        | `2222`                      |
 | Deploy user     | `nurbek` (sudo, key-based)  |
@@ -27,15 +27,15 @@ Set the following records on the registrar of `kebruni.me` (e.g. Cloudflare):
 
 | Type | Name      | Value           | Proxy   | TTL   |
 | ---- | --------- | --------------- | ------- | ----- |
-| A    | `together`| `164.92.240.90` | DNS only | Auto |
+| A    | `linkforge`| `164.92.240.90` | DNS only | Auto |
 
 Wildcard for future custom-domain feature (out of MVP):
 
 | Type | Name      | Value           |
 | ---- | --------- | --------------- |
-| A    | `*.together` | `164.92.240.90` |
+| A    | `*.linkforge` | `164.92.240.90` |
 
-After saving, verify with `dig +short together.kebruni.me`.
+After saving, verify with `dig +short linkforge.kebruni.me`.
 
 ---
 
@@ -168,7 +168,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
 ```bash
 # Bootstrap the cert. Initially nginx serves a temporary HTTP-only config
 # that just exposes /.well-known/acme-challenge.
-bash scripts/ssl-init.sh together.kebruni.me admin@kebruni.me
+bash scripts/ssl-init.sh linkforge.kebruni.me admin@kebruni.me
 
 # After success, nginx reloads with the full HTTPS config (HTTP/2,
 # strict TLS, HSTS) and certbot installs a renew timer.
@@ -184,9 +184,9 @@ The `nginx` container picks up new certs via `inotifywait` reload.
 Verify TLS:
 
 ```bash
-curl -I https://together.kebruni.me           # 200 + HSTS header
-curl -I http://together.kebruni.me            # 301 → https://...
-openssl s_client -connect together.kebruni.me:443 -servername together.kebruni.me \
+curl -I https://linkforge.kebruni.me           # 200 + HSTS header
+curl -I http://linkforge.kebruni.me            # 301 → https://...
+openssl s_client -connect linkforge.kebruni.me:443 -servername linkforge.kebruni.me \
     < /dev/null | openssl x509 -noout -dates
 ```
 
@@ -281,7 +281,7 @@ fail2ban-client status sshd
 
 ### Health checks
 
-- `https://together.kebruni.me/api/health` — JSON `{ ok, db, redis }`.
+- `https://linkforge.kebruni.me/api/health` — JSON `{ ok, db, redis }`.
 - Add an external uptime probe to alert when this returns non-200.
 
 ### Shell into containers

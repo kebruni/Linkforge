@@ -39,4 +39,4 @@ echo "==> Pruning old images"
 docker image prune -f
 
 echo "==> Deploy done.  Health check:"
-curl -fsS https://together.kebruni.me/api/health || true
+curl -fsS https://linkforge.kebruni.me/api/health || true

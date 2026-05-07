@@ -619,7 +619,7 @@ A `SECURITY.md` will document responsible-disclosure once we open the repo.
   exposes Prometheus counters (HTTP latency, queue depth, DB pool).
 - **Errors**. Sentry SDK on both web and worker if `SENTRY_DSN` set.
 - **Uptime**. External ping (UptimeRobot / Better Stack) hits
-  `https://together.kebruni.me/api/health` every minute.
+  `https://linkforge.kebruni.me/api/health` every minute.
 - **Alerting**. Grafana alerts on: 5xx rate > 1 %/5 min, DB connection
   pool > 80 %, queue depth > 1 000, certbot expiry < 7 days.
 

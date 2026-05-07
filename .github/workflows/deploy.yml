@@ -31,7 +31,7 @@ jobs:
       - name: Smoke test
         run: |
           for i in 1 2 3 4 5; do
-            if curl -fsS https://together.kebruni.me/api/health; then
+            if curl -fsS https://linkforge.kebruni.me/api/health; then
               exit 0
             fi
             sleep 5

@@ -6,11 +6,11 @@
 # handled by the certbot container in docker-compose.prod.yml.
 #
 # Usage:
-#   DOMAIN=together.kebruni.me EMAIL=admin@kebruni.me ./scripts/ssl-init.sh
+#   DOMAIN=linkforge.kebruni.me EMAIL=admin@kebruni.me ./scripts/ssl-init.sh
 ###############################################################################
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-together.kebruni.me}"
+DOMAIN="${DOMAIN:-linkforge.kebruni.me}"
 EMAIL="${EMAIL:?EMAIL env var is required}"
 COMPOSE="${COMPOSE:-docker compose -f docker-compose.prod.yml}"
 

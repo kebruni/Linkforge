@@ -58,7 +58,7 @@ App will be at <http://localhost:3000>. The public renderer is at
 ## Production
 
 See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the full Ubuntu 24.04 + Docker +
-Nginx + Let's Encrypt walkthrough targeting `together.kebruni.me`.
+Nginx + Let's Encrypt walkthrough targeting `linkforge.kebruni.me`.
 
 ```bash
 # On the VPS, after first-time setup:
