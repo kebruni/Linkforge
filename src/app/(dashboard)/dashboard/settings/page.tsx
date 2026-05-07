@@ -50,7 +50,11 @@ export default async function SettingsPage() {
         <CardContent className="space-y-2 text-sm">
           <Row label="2FA" value={<Badge variant={user.twoFactorEnabled ? "success" : "outline"}>{user.twoFactorEnabled ? "Enabled" : "Disabled"}</Badge>} />
           <p className="pt-2 text-xs text-muted-foreground">
-            Device sessions and per-event audit logs are visible to ADMIN users in <code>/admin</code>.
+            Manage two-factor authentication, recovery codes and active devices in{" "}
+            <a className="font-medium underline" href="/dashboard/settings/security">
+              Security
+            </a>
+            .
           </p>
         </CardContent>
       </Card>

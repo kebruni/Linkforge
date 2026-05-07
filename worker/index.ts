@@ -9,6 +9,7 @@
 import { Worker, type Job } from "bullmq";
 import { PrismaClient, AnalyticsEventType } from "@prisma/client";
 import { config as loadDotenv } from "dotenv";
+import nodemailer, { type Transporter } from "nodemailer";
 
 loadDotenv();
 loadDotenv({ path: ".env.local", override: false });
@@ -17,6 +18,32 @@ import { env } from "../src/lib/env";
 import { redis } from "../src/lib/redis";
 import { QUEUE_NAMES } from "../src/lib/queue";
 import { logger } from "../src/lib/logger";
+
+let _transporter: Transporter | null | undefined;
+
+async function getTransport(): Promise<Transporter | null> {
+  if (_transporter !== undefined) return _transporter;
+  if (!env.SMTP_HOST) {
+    _transporter = null;
+    return _transporter;
+  }
+  _transporter = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_PORT === 465,
+    auth:
+      env.SMTP_USER && env.SMTP_PASSWORD
+        ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD }
+        : undefined,
+  });
+  try {
+    await _transporter.verify();
+    logger.info({ host: env.SMTP_HOST, port: env.SMTP_PORT }, "email-send.transport_ready");
+  } catch (err) {
+    logger.warn({ err }, "email-send.transport_verify_failed");
+  }
+  return _transporter;
+}
 
 const prisma = new PrismaClient({ log: ["error"] });
 
@@ -239,7 +266,41 @@ function startBullWorkers() {
     new Worker(
       QUEUE_NAMES.emailSend,
       async (job: Job) => {
-        logger.info({ id: job.id, to: job.data?.to }, "email-send: stub");
+        const { to, subject, text, html, template } = (job.data ?? {}) as {
+          to?: string;
+          subject?: string;
+          text?: string;
+          html?: string;
+          template?: string;
+        };
+        if (!to || !subject || !text) {
+          logger.warn({ id: job.id, template }, "email-send.missing_fields");
+          return;
+        }
+        const transporter = await getTransport();
+        if (!transporter) {
+          logger.info(
+            { id: job.id, to, subject, template },
+            "email-send.dry_run (SMTP_HOST not configured)",
+          );
+          return;
+        }
+        try {
+          const info = await transporter.sendMail({
+            from: env.EMAIL_FROM || `no-reply@${new URL(env.APP_URL).hostname}`,
+            to,
+            subject,
+            text,
+            html,
+          });
+          logger.info(
+            { id: job.id, to, template, messageId: info.messageId },
+            "email-send.delivered",
+          );
+        } catch (err) {
+          logger.error({ err, id: job.id, to, template }, "email-send.failed");
+          throw err;
+        }
       },
       { connection },
     ),

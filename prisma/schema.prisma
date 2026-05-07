@@ -79,11 +79,16 @@ enum AnalyticsEventType {
 
 enum AuditAction {
   USER_LOGIN
+  USER_LOGIN_FAILED
+  USER_LOGIN_NEW_DEVICE
   USER_LOGOUT
   USER_REGISTER
   USER_PASSWORD_CHANGED
   USER_2FA_ENABLED
   USER_2FA_DISABLED
+  USER_2FA_RECOVERY_USED
+  USER_2FA_RECOVERY_REGENERATED
+  USER_SESSION_REVOKED
   USER_SUSPENDED
   PAGE_CREATED
   PAGE_PUBLISHED
@@ -179,17 +184,24 @@ model AuthSession {
   refreshTokenHash   String   @unique
   deviceLabel        String?
   ip                 String?
+  ipHash             String?
   country            String?
   userAgent          String?
+  device             String?
+  os                 String?
+  browser            String?
   twoFactorPassedAt  DateTime?
   requiresStepUp     Boolean  @default(false)
+  notifiedAt         DateTime?
   expiresAt          DateTime
   revokedAt          DateTime?
   createdAt          DateTime @default(now())
   lastUsedAt         DateTime @default(now())
 
   @@index([userId])
+  @@index([userId, revokedAt])
   @@index([expiresAt])
+  @@index([ipHash])
 }
 
 // One-time recovery codes for 2FA.

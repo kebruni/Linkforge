@@ -6,7 +6,10 @@
 > design) and `DEPLOYMENT.md` (VPS guide).
 
 Last updated: **2026-05-07** by Devin session
-[`56ee684822e7436680adc10ba19d12b5`](https://app.devin.ai/sessions/56ee684822e7436680adc10ba19d12b5).
+[`ac48db3ac7474c4eb510eb8a05700442`](https://app.devin.ai/sessions/ac48db3ac7474c4eb510eb8a05700442) — Auth hardening (PR #4 of v1.1) shipped: TOTP 2FA + recovery codes + device sessions UI + suspicious-login email + audit logs.
+
+Prior updates:
+- 2026-05-07 [`56ee684822e7436680adc10ba19d12b5`](https://app.devin.ai/sessions/56ee684822e7436680adc10ba19d12b5) — MVP scaffold + domain rename + this handover doc.
 
 ---
 
@@ -111,7 +114,7 @@ asks:
 
 | #   | Section                | Status | Where                                                                                |
 | --- | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
-| 1   | Auth (basic)           | 🟡     | `src/auth.config.ts`, `src/auth.ts`, `src/middleware.ts`, `src/features/auth/*`      |
+| 1   | Auth (basic + 2FA)     | ✅     | `src/auth.config.ts`, `src/auth.ts`, `src/middleware.ts`, `src/features/auth/*`, `src/features/security/*`, `src/lib/{totp,recovery,audit,auth-sessions,email}.ts`, `src/app/api/auth/{preflight,2fa,sessions}/**` |
 | 2   | Dashboard (basic)      | 🟡     | `src/app/(dashboard)/*`, `src/features/dashboard/*`                                  |
 | 3   | Page builder (basic)   | 🟡     | `src/features/builder/*`, `src/components/builder/*`, `src/app/api/pages/[id]/*`    |
 | 4   | Design system          | 🟡     | `tailwind.config.ts`, `src/components/ui/*`, `src/styles/*`                          |
@@ -124,7 +127,7 @@ asks:
 | 14  | UI/UX                  | 🟡     | `src/components/*`, `src/app/(marketing)/page.tsx`                                   |
 | 15  | Landing page           | ✅     | `src/app/(marketing)/page.tsx`                                                       |
 | 17  | Production requirements| ✅     | `Dockerfile`, `docker-compose.{dev,prod}.yml`, `.github/workflows/*`                 |
-| 18  | Testing                | 🟡     | Vitest wired (`pnpm test`), no tests yet.                                            |
+| 18  | Testing                | 🟡     | Vitest wired (`pnpm test`); 17 unit tests for `crypto`/`recovery`/`totp`. e2e/Playwright still TODO. |
 | 19  | Performance            | 🟡     | Next 15 standalone build, Redis caching, code splitting via App Router.              |
 | 20  | Deployment             | ✅     | `nginx/`, `scripts/{setup-vps,ssl-init,deploy,backup-db,restore-db}.sh`, CI/CD       |
 
@@ -132,7 +135,7 @@ asks:
 
 | #   | Section                | Status | Notes                                                                                  |
 | --- | ---------------------- | ------ | -------------------------------------------------------------------------------------- |
-| 1   | Auth (full)            | ⏳     | 2FA UI, device sessions list, suspicious-login email, OAuth Telegram. v1.1.           |
+| 1   | Auth (Telegram OAuth)  | ⏳     | OAuth Telegram (login widget + `/api/auth/telegram/callback` HMAC verify) is the last piece left for v1.1 auth. |
 | 2   | Dashboard (full)       | ⏳     | Realtime dashboard, heatmaps, conversion funnels. v1.2.                                |
 | 3   | Page builder (full)    | ⏳     | TikTok/Telegram/Spotify embeds, FAQ, countdown, gallery, testimonials, products, donations, map blocks. v1.1. |
 | 4   | Design system (full)   | ⏳     | Animated backgrounds, particles, custom fonts (Google Fonts loader), themes marketplace. v1.2. |
@@ -170,10 +173,14 @@ table are suggested — match the existing style (`feat(linkforge): ...` /
    - Routes under `/admin` already gated by `role === ADMIN`.
    - Need: data tables (use `@tanstack/react-table`), audit-log viewer,
      content-report queue, feature-flag UI.
-4. **Auth hardening** — `feat(linkforge): 2FA UI, device sessions, suspicious-login email`
-   - Schema already has `TotpSecret`, `RecoveryCode`, `AuthSession`.
-   - Need: TOTP enrollment flow, device list UI, new-device email template
-     + send via worker, per-IP login rate-limit + lockout.
+4. **Auth hardening** — `feat(linkforge): 2FA UI, device sessions, suspicious-login email` ✅ **DONE**
+   - Schema: `AuditAction` extended (`USER_2FA_*`, `USER_SESSION_*`, `USER_LOGIN_*`); `AuthSession` got `userId/sessionToken/twoFactorPassedAt/ipHash/ipCountry/userAgent/deviceLabel/lastUsedAt/revokedAt`.
+   - Libs: `src/lib/totp.ts` (otplib), `src/lib/recovery.ts` (10x base32 codes, hashed at rest), `src/lib/audit.ts`, `src/lib/auth-sessions.ts` (UA/IP fingerprinting + suspicious-login detection), `src/lib/email.ts` (queue helper).
+   - Auth flow: `src/auth.ts` Credentials.authorize verifies argon2 password → if 2FA enabled, requires TOTP or recovery code; records `AuthSession`; on new device/country fans out a `USER_LOGIN_NEW_DEVICE` email via the worker.
+   - API: `/api/auth/preflight`, `/api/auth/2fa/{setup,enable,disable,recovery-codes}`, `/api/auth/sessions[/:id, /revoke-all]`.
+   - UI: `/dashboard/settings/security` with `TwoFactorCard` (QR enrol → verify → reveal recovery codes), `SessionsList` (revoke single / revoke-all-others), `RegenerateCodesCard`. Login form upgraded to two-step (preflight → TOTP/recovery → signIn).
+   - Worker: real `nodemailer` SMTP path with graceful no-op when `SMTP_HOST` is unset (logs as `email-send.dry_run`).
+   - Tests: `tests/{crypto,recovery,totp}.test.ts` — 17 specs, all passing.
 5. **Telegram OAuth** — `feat(linkforge): telegram login widget + callback`
    - Need: `/api/auth/telegram/callback` HMAC verify, widget on login page.
 6. **Block library expansion** — `feat(linkforge): TikTok/Spotify/FAQ/countdown/gallery blocks`

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, Home, Layout, Settings, Wand2, LogOut } from "lucide-react";
+import { BarChart3, Home, Layout, Settings, Shield, Wand2, LogOut } from "lucide-react";
 import { auth, signOut } from "@/auth";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/ai", label: "AI co-pilot", icon: Wand2 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/settings/security", label: "Security", icon: Shield },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
