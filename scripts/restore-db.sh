@@ -12,12 +12,13 @@ if [[ ! -f "${BACKUP}" ]]; then
   exit 1
 fi
 set -a; source .env.production; set +a
+COMPOSE=(docker compose -f docker-compose.prod.yml --env-file .env.production)
 
 echo "!! This will OVERWRITE the database '${POSTGRES_DB:-linkforge}'."
 read -p "Type 'restore' to continue: " ack
 [[ "${ack}" == "restore" ]] || { echo "Aborted."; exit 1; }
 
-gunzip -c "${BACKUP}" | docker compose -f docker-compose.prod.yml exec -T postgres \
+gunzip -c "${BACKUP}" | "${COMPOSE[@]}" exec -T postgres \
   psql -U "${POSTGRES_USER:-linkforge}" -d "${POSTGRES_DB:-linkforge}"
 
 echo "==> Restored from ${BACKUP}"

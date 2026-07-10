@@ -20,11 +20,12 @@ BACKUP_DIR="${BACKUP_DIR:-/srv/linkforge/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 FILE="${BACKUP_DIR}/linkforge-${TIMESTAMP}.sql.gz"
+COMPOSE=(docker compose -f docker-compose.prod.yml --env-file .env.production)
 
 mkdir -p "${BACKUP_DIR}"
 
 echo "==> Dumping to ${FILE}"
-docker compose -f docker-compose.prod.yml exec -T postgres \
+"${COMPOSE[@]}" exec -T postgres \
   pg_dump --no-owner --no-acl --clean --if-exists -U "${POSTGRES_USER:-linkforge}" "${POSTGRES_DB:-linkforge}" \
   | gzip -9 > "${FILE}"
 

@@ -7,6 +7,9 @@ import { rateLimit } from "@/lib/rate-limit";
 import { resolveFromHeaders } from "@/lib/geo";
 import { isValidSlug, slugify } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { issueToken } from "@/lib/tokens";
+import { sendEmailVerification } from "@/lib/email";
+import { writeAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -66,6 +69,18 @@ export async function POST(req: Request) {
     select: { id: true, email: true, username: true },
   });
 
+  try {
+    const verifyToken = await issueToken({
+      identifier: user.id,
+      purpose: "EMAIL_VERIFY",
+      ttlMs: 24 * 60 * 60 * 1000,
+    });
+    await sendEmailVerification(user.email, verifyToken);
+  } catch (err) {
+    logger.warn({ err, userId: user.id }, "auth.register.verify_email_failed");
+  }
+
+  await writeAudit({ action: "USER_REGISTER", userId: user.id, ip: ipKey });
   logger.info({ userId: user.id }, "auth.register.success");
 
   return ok({ id: user.id, email: user.email, username: user.username }, { status: 201 });

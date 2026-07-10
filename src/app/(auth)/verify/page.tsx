@@ -1,12 +1,12 @@
-export const metadata = { title: "Check your email" };
+import { Suspense } from "react";
+import { VerifyEmailClient } from "@/features/auth/verify-email-client";
+
+export const metadata = { title: "Verify email" };
 
 export default function VerifyPage() {
   return (
-    <div className="space-y-3 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">Check your email</h1>
-      <p className="text-sm text-muted-foreground">
-        We sent a magic link to your inbox. Click the link to finish signing in.
-      </p>
-    </div>
+    <Suspense fallback={<div className="h-32 animate-pulse rounded-md bg-muted/50" />}>
+      <VerifyEmailClient />
+    </Suspense>
   );
 }

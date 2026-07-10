@@ -163,5 +163,8 @@ export const BLOCK_PALETTE: { kind: BlockKind; label: string; description: strin
   { kind: "FAQ", label: "FAQ", description: "Q&A list" },
   { kind: "COUNTDOWN", label: "Countdown", description: "Live countdown to a date" },
   { kind: "GALLERY", label: "Gallery", description: "Image grid" },
+  { kind: "MAP", label: "Map", description: "Google Maps embed" },
+  { kind: "DONATION", label: "Donation", description: "Tip jar (Stripe soon)" },
+  { kind: "PRODUCT", label: "Product", description: "Digital product card" },
   { kind: "DIVIDER", label: "Divider", description: "Spacer / hairline" },
 ];

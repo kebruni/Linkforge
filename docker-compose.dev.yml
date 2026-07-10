@@ -1,6 +1,7 @@
 # Local dev: postgres + redis only.  Run the Next.js dev server on the host
 # with `pnpm dev` so HMR works.
-version: "3.9"
+# Postgres is published on host :5433 to avoid clashing with a local Postgres
+# already bound to :5432. Use DATABASE_URL ...@localhost:5433/... in .env.
 
 services:
   postgres:
@@ -11,7 +12,7 @@ services:
       POSTGRES_PASSWORD: linkforge
       POSTGRES_DB: linkforge
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

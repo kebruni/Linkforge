@@ -38,6 +38,7 @@ export function LoginForm() {
       toast({ variant: "destructive", title: "Sign in failed", description: "Check your credentials and try again." });
       return;
     }
+    // Middleware will bounce to /login/2fa when twoFactorPending is set
     router.replace(next);
     router.refresh();
   });
@@ -50,7 +51,12 @@ export function LoginForm() {
         {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Password</Label>
+          <a href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Forgot password?
+          </a>
+        </div>
         <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
       </div>

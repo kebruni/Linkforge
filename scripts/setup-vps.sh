@@ -4,17 +4,19 @@
 #
 # Idempotent provisioning script for a fresh Ubuntu 24.04 VPS (root).
 # Installs Docker, configures UFW + fail2ban, hardens SSH, creates the deploy
-# user and writes them an authorized_keys file.
+# user and app directories under /srv/linkforge.
 #
 # Usage:
-#   scp scripts/setup-vps.sh root@164.92.240.90:/tmp/
-#   ssh -p 22 root@164.92.240.90 'DEPLOY_USER=nurbek SSH_PORT=2222 bash /tmp/setup-vps.sh'
+#   scp -P 2222 scripts/setup-vps.sh root@164.92.240.90:/tmp/
+#   ssh -p 2222 root@164.92.240.90 \
+#     'DEPLOY_USER=nurbek SSH_PORT=2222 bash /tmp/setup-vps.sh'
 ###############################################################################
 set -euo pipefail
 
 DEPLOY_USER="${DEPLOY_USER:-nurbek}"
 SSH_PORT="${SSH_PORT:-2222}"
 DEPLOY_PUBKEY="${DEPLOY_PUBKEY:-}"
+APP_ROOT="${APP_ROOT:-/srv/linkforge}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root (sudo)." >&2
@@ -72,7 +74,7 @@ sed -i \
   -e "s/^#\?UsePAM .*/UsePAM yes/" \
   -e "s/^#\?X11Forwarding .*/X11Forwarding no/" \
   "${sshd_config}"
-systemctl restart ssh
+systemctl restart ssh || systemctl restart sshd
 
 echo "==> Configuring UFW"
 ufw default deny incoming
@@ -93,14 +95,21 @@ backend  = systemd
 [sshd]
 enabled = true
 port    = ${SSH_PORT}
-
-[nginx-limit-req]
-enabled = true
-filter  = nginx-limit-req
-logpath = /var/log/nginx/error.log
-maxretry = 10
 JAIL
 systemctl enable --now fail2ban
 systemctl restart fail2ban
 
-echo "==> Done.  Now log in as ${DEPLOY_USER}@<ip> -p ${SSH_PORT} and run scripts/deploy.sh."
+echo "==> App directories at ${APP_ROOT}"
+install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" \
+  "${APP_ROOT}" \
+  "${APP_ROOT}/backups" \
+  "${APP_ROOT}/letsencrypt/conf" \
+  "${APP_ROOT}/letsencrypt/www"
+
+echo "==> Done."
+echo "    1. Login as ${DEPLOY_USER}@<ip> -p ${SSH_PORT}"
+echo "    2. git clone <repo> ${APP_ROOT}   (or clone into ${APP_ROOT})"
+echo "    3. cp .env.example .env.production && chmod 600 .env.production"
+echo "    4. Fill production secrets (see .env.example production section)"
+echo "    5. EMAIL=admin@kebruni.me bash scripts/ssl-init.sh"
+echo "    6. bash scripts/deploy.sh"

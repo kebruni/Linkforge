@@ -1,7 +1,11 @@
 import { auth } from "@/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/env";
+import { isBillingConfigured } from "@/lib/stripe";
+import { ProfileForm } from "@/features/settings/profile-form";
+import { SecurityForm } from "@/features/settings/security-form";
+import { BillingForm } from "@/features/settings/billing-form";
 
 export const metadata = { title: "Settings" };
 
@@ -17,7 +21,15 @@ export default async function SettingsPage() {
       name: true,
       role: true,
       twoFactorEnabled: true,
+      marketingOptIn: true,
       createdAt: true,
+      subscription: {
+        select: {
+          status: true,
+          plan: true,
+          currentPeriodEnd: true,
+        },
+      },
     },
   });
 
@@ -29,40 +41,59 @@ export default async function SettingsPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-muted-foreground">Account, security, billing.</p>
       </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>Public profile and contact info.</CardDescription>
+          <CardTitle>Profile</CardTitle>
+          <CardDescription>Public name and username used across Linkforge.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <Row label="Name" value={user.name ?? "—"} />
-          <Row label="Username" value={`@${user.username}`} />
-          <Row label="Email" value={user.email} />
-          <Row label="Plan" value={<Badge variant={user.role === "PRO" ? "accent" : "outline"}>{user.role}</Badge>} />
-          <Row label="Member since" value={user.createdAt.toLocaleDateString()} />
+        <CardContent>
+          <ProfileForm
+            initial={{
+              name: user.name ?? user.username,
+              username: user.username,
+              email: user.email,
+              marketingOptIn: user.marketingOptIn,
+            }}
+          />
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Plan & billing</CardTitle>
+          <CardDescription>Upgrade to PRO for unlimited pages, AI and custom domains.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BillingForm
+            role={user.role}
+            billingEnabled={isBillingConfigured()}
+            subscription={
+              user.subscription
+                ? {
+                    status: user.subscription.status,
+                    plan: user.subscription.plan,
+                    currentPeriodEnd: user.subscription.currentPeriodEnd?.toISOString() ?? null,
+                  }
+                : null
+            }
+          />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Security</CardTitle>
-          <CardDescription>Two-factor authentication, sessions and audit logs.</CardDescription>
+          <CardDescription>Password, two-factor authentication, recovery codes.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <Row label="2FA" value={<Badge variant={user.twoFactorEnabled ? "success" : "outline"}>{user.twoFactorEnabled ? "Enabled" : "Disabled"}</Badge>} />
-          <p className="pt-2 text-xs text-muted-foreground">
-            Device sessions and per-event audit logs are visible to ADMIN users in <code>/admin</code>.
-          </p>
+        <CardContent>
+          <SecurityForm twoFactorEnabled={user.twoFactorEnabled} />
         </CardContent>
       </Card>
-    </div>
-  );
-}
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between border-b py-2 last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+      <p className="text-xs text-muted-foreground">
+        App: {env.APP_NAME} · {env.APP_URL}
+      </p>
     </div>
   );
 }

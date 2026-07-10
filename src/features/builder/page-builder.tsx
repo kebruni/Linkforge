@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Eye, EyeOff, GripVertical, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Eye, EyeOff, GripVertical, Loader2, Plus, QrCode, Save, Trash2 } from "lucide-react";
 import type { BlockType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,14 @@ type EditorBlock = {
   content: Record<string, unknown>;
 };
 
+type ThemeTokens = {
+  background: string;
+  surface: string;
+  text: string;
+  accent: string;
+  radius: number;
+};
+
 type EditorPage = {
   id: string;
   slug: string;
@@ -52,12 +60,25 @@ type EditorPage = {
   theme: { tokens: Record<string, unknown> } | null;
 };
 
+const DEFAULT_THEME: ThemeTokens = {
+  background: "#FAFAFA",
+  surface: "#FFFFFF",
+  text: "#0A0A0A",
+  accent: "#7C3AED",
+  radius: 16,
+};
+
 export function PageBuilder({ page }: { page: EditorPage }) {
   const router = useRouter();
   const [title, setTitle] = useState(page.title);
   const [description, setDescription] = useState(page.description ?? "");
   const [isPublished, setIsPublished] = useState(page.isPublished);
   const [blocks, setBlocks] = useState<EditorBlock[]>(page.blocks);
+  const [theme, setTheme] = useState<ThemeTokens>(() => ({
+    ...DEFAULT_THEME,
+    ...(page.theme?.tokens as Partial<ThemeTokens> | undefined),
+  }));
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const sensors = useSensors(
@@ -115,19 +136,44 @@ export function PageBuilder({ page }: { page: EditorPage }) {
 
   function savePage() {
     startTransition(async () => {
-      const res = await fetch(`/api/pages/${page.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, description, isPublished }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.ok === false) {
-        toast({ variant: "destructive", title: "Save failed", description: json?.message ?? "" });
+      const [pageRes, themeRes] = await Promise.all([
+        fetch(`/api/pages/${page.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title, description, isPublished }),
+        }),
+        fetch(`/api/pages/${page.id}/theme`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ tokens: theme }),
+        }),
+      ]);
+      const pageJson = await pageRes.json();
+      if (!pageRes.ok || pageJson.ok === false) {
+        toast({ variant: "destructive", title: "Save failed", description: pageJson?.message ?? "" });
+        return;
+      }
+      if (!themeRes.ok) {
+        toast({ variant: "destructive", title: "Theme save failed" });
         return;
       }
       toast({ variant: "success", title: "Saved" });
       router.refresh();
     });
+  }
+
+  async function loadQr() {
+    try {
+      const res = await fetch(`/api/pages/${page.id}/qr`);
+      const json = await res.json();
+      if (res.ok && json.ok && json.data?.dataUrl) {
+        setQrDataUrl(json.data.dataUrl);
+      } else {
+        toast({ variant: "destructive", title: "Couldn't generate QR" });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Couldn't generate QR" });
+    }
   }
 
   // Persist title/description automatically (debounced)
@@ -141,6 +187,31 @@ export function PageBuilder({ page }: { page: EditorPage }) {
     }, 600);
     return () => clearTimeout(id);
   }, [title, description, page.id]);
+
+  // Persist theme tokens (debounced)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      void fetch(`/api/pages/${page.id}/theme`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tokens: theme }),
+      });
+    }, 500);
+    return () => clearTimeout(id);
+  }, [theme, page.id]);
+
+  const previewPage = {
+    id: page.id,
+    slug: page.slug,
+    title,
+    description,
+    isPublished,
+    ogImageUrl: null,
+    faviconUrl: null,
+    metaJson: null,
+    blocks: blocks.map((b) => ({ ...b, content: b.content })),
+    theme: { tokens: theme as unknown as Record<string, unknown> },
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -157,7 +228,9 @@ export function PageBuilder({ page }: { page: EditorPage }) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Switch checked={isPublished} onCheckedChange={setIsPublished} id="publish" />
-              <Label htmlFor="publish" className="text-sm">Publish</Label>
+              <Label htmlFor="publish" className="text-sm">
+                Publish
+              </Label>
             </div>
             <Button onClick={savePage} variant="accent" disabled={pending}>
               {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
@@ -201,6 +274,51 @@ export function PageBuilder({ page }: { page: EditorPage }) {
 
         <Card>
           <CardHeader>
+            <CardTitle>Theme</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {(
+              [
+                ["background", "Background"],
+                ["surface", "Surface"],
+                ["text", "Text"],
+                ["accent", "Accent"],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key} className="space-y-2">
+                <Label htmlFor={`theme-${key}`}>{label}</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id={`theme-${key}`}
+                    type="color"
+                    className="h-10 w-12 cursor-pointer rounded border bg-transparent p-1"
+                    value={theme[key]}
+                    onChange={(e) => setTheme((t) => ({ ...t, [key]: e.target.value }))}
+                  />
+                  <Input
+                    value={theme[key]}
+                    onChange={(e) => setTheme((t) => ({ ...t, [key]: e.target.value }))}
+                  />
+                </div>
+              </div>
+            ))}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="theme-radius">Corner radius ({theme.radius}px)</Label>
+              <input
+                id="theme-radius"
+                type="range"
+                min={0}
+                max={32}
+                value={theme.radius}
+                onChange={(e) => setTheme((t) => ({ ...t, radius: Number(e.target.value) }))}
+                className="w-full"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>SEO</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -215,6 +333,36 @@ export function PageBuilder({ page }: { page: EditorPage }) {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <QrCode className="size-4" />
+              QR code
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            {qrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qrDataUrl} alt={`QR for /u/${page.slug}`} className="size-36 rounded-md border bg-white p-2" />
+            ) : (
+              <div className="grid size-36 place-items-center rounded-md border border-dashed text-xs text-muted-foreground">
+                Not generated
+              </div>
+            )}
+            <div className="space-y-2">
+              <Button type="button" variant="outline" onClick={loadQr}>
+                Generate QR
+              </Button>
+              {qrDataUrl ? (
+                <a href={qrDataUrl} download={`linkforge-${page.slug}.png`} className="block text-sm text-accent underline">
+                  Download PNG
+                </a>
+              ) : null}
+              <p className="text-xs text-muted-foreground">Points to your public page URL.</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="lg:sticky lg:top-6">
@@ -224,44 +372,10 @@ export function PageBuilder({ page }: { page: EditorPage }) {
             <TabsTrigger value="desktop">Desktop</TabsTrigger>
           </TabsList>
           <TabsContent value="mobile">
-            <LivePreview
-              page={{
-                id: page.id,
-                slug: page.slug,
-                title,
-                description,
-                isPublished,
-                ogImageUrl: null,
-                faviconUrl: null,
-                metaJson: null,
-                blocks: blocks.map((b) => ({
-                  ...b,
-                  content: b.content,
-                })),
-                theme: page.theme,
-              }}
-              width={380}
-            />
+            <LivePreview page={previewPage} width={380} />
           </TabsContent>
           <TabsContent value="desktop">
-            <LivePreview
-              page={{
-                id: page.id,
-                slug: page.slug,
-                title,
-                description,
-                isPublished,
-                ogImageUrl: null,
-                faviconUrl: null,
-                metaJson: null,
-                blocks: blocks.map((b) => ({
-                  ...b,
-                  content: b.content,
-                })),
-                theme: page.theme,
-              }}
-              width={760}
-            />
+            <LivePreview page={previewPage} width={760} />
           </TabsContent>
         </Tabs>
       </div>
@@ -286,54 +400,321 @@ function SortableBlockRow({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
-  const labelValue =
-    block.label ?? (typeof block.content?.label === "string" ? (block.content.label as string) : "");
-  const urlValue = block.url ?? (typeof block.content?.url === "string" ? (block.content.url as string) : "");
+
+  function patchContent(partial: Record<string, unknown>) {
+    const next = { ...block.content, ...partial };
+    const extra: Partial<EditorBlock> = { content: next };
+    if (typeof partial.label === "string") extra.label = partial.label;
+    if (typeof partial.url === "string") extra.url = partial.url;
+    if (typeof partial.src === "string" && block.type === "IMAGE") {
+      // keep url for convenience
+    }
+    onChange(block.id, extra);
+  }
 
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 rounded-md border bg-card p-3 shadow-sm"
-    >
-      <button
-        type="button"
-        aria-label="Drag block"
-        className="cursor-grab text-muted-foreground"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-4" />
-      </button>
-      <div className="grid flex-1 gap-2 md:grid-cols-2">
-        <Input
-          value={labelValue}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange(block.id, { label: v, content: { ...block.content, label: v } });
-          }}
-          placeholder={`${block.type.toLowerCase()} label`}
-        />
-        <Input
-          value={urlValue}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange(block.id, { url: v, content: { ...block.content, url: v } });
-          }}
-          placeholder="https://example.com"
-        />
+    <li ref={setNodeRef} style={style} className="rounded-md border bg-card p-3 shadow-sm">
+      <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Drag block"
+          className="cursor-grab text-muted-foreground"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{block.type}</span>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Toggle visibility"
+            onClick={() => onChange(block.id, { hidden: !block.hidden })}
+          >
+            {block.hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </Button>
+          <Button size="icon" variant="ghost" aria-label="Delete block" onClick={() => onDelete(block.id)}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label="Toggle visibility"
-        onClick={() => onChange(block.id, { hidden: !block.hidden })}
-      >
-        {block.hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </Button>
-      <Button size="icon" variant="ghost" aria-label="Delete block" onClick={() => onDelete(block.id)}>
-        <Trash2 className="size-4" />
-      </Button>
+      <BlockInspector block={block} onContent={patchContent} onChange={onChange} />
     </li>
   );
+}
+
+function BlockInspector({
+  block,
+  onContent,
+  onChange,
+}: {
+  block: EditorBlock;
+  onContent: (partial: Record<string, unknown>) => void;
+  onChange: (id: string, patch: Partial<EditorBlock>) => void;
+}) {
+  const c = block.content;
+
+  switch (block.type) {
+    case "HEADER":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={str(c.title)}
+            onChange={(e) => onContent({ title: e.target.value })}
+            placeholder="Title"
+          />
+          <Input
+            value={str(c.subtitle)}
+            onChange={(e) => onContent({ subtitle: e.target.value })}
+            placeholder="Subtitle"
+          />
+        </div>
+      );
+    case "AVATAR":
+      return (
+        <Input
+          value={str(c.src)}
+          onChange={(e) => onContent({ src: e.target.value || null })}
+          placeholder="https://…/avatar.jpg"
+        />
+      );
+    case "LINK":
+    case "BUTTON":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={block.label ?? str(c.label)}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(block.id, { label: v, content: { ...c, label: v } });
+            }}
+            placeholder="Label"
+          />
+          <Input
+            value={block.url ?? str(c.url)}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(block.id, { url: v, content: { ...c, url: v } });
+            }}
+            placeholder="https://example.com"
+          />
+        </div>
+      );
+    case "TEXT":
+      return (
+        <Textarea
+          value={str(c.text)}
+          onChange={(e) => onContent({ text: e.target.value })}
+          placeholder="Write something…"
+          rows={3}
+        />
+      );
+    case "IMAGE":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={str(c.src)}
+            onChange={(e) => onContent({ src: e.target.value })}
+            placeholder="Image URL"
+          />
+          <Input
+            value={str(c.alt)}
+            onChange={(e) => onContent({ alt: e.target.value })}
+            placeholder="Alt text"
+          />
+        </div>
+      );
+    case "EMBED":
+    case "VIDEO":
+      return (
+        <Input
+          value={block.url ?? str(c.url)}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(block.id, { url: v, content: { ...c, url: v } });
+          }}
+          placeholder="YouTube / TikTok / Spotify URL"
+        />
+      );
+    case "FAQ":
+      return (
+        <Textarea
+          value={JSON.stringify(c.items ?? [{ q: "Question", a: "Answer" }], null, 2)}
+          onChange={(e) => {
+            try {
+              const items = JSON.parse(e.target.value) as unknown;
+              if (Array.isArray(items)) onContent({ items });
+            } catch {
+              /* ignore while typing */
+            }
+          }}
+          rows={5}
+          className="font-mono text-xs"
+        />
+      );
+    case "COUNTDOWN":
+      return (
+        <Input
+          type="datetime-local"
+          value={toLocalInput(str(c.targetAt))}
+          onChange={(e) => {
+            const d = new Date(e.target.value);
+            if (!Number.isNaN(d.getTime())) onContent({ targetAt: d.toISOString() });
+          }}
+        />
+      );
+    case "GALLERY":
+      return (
+        <Textarea
+          value={Array.isArray(c.images) ? (c.images as string[]).join("\n") : ""}
+          onChange={(e) =>
+            onContent({
+              images: e.target.value
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            })
+          }
+          placeholder="One image URL per line"
+          rows={3}
+        />
+      );
+    case "MAP":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={str(c.query)}
+            onChange={(e) => onContent({ query: e.target.value })}
+            placeholder="City or address"
+          />
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            value={typeof c.zoom === "number" ? c.zoom : 13}
+            onChange={(e) => onContent({ zoom: Number(e.target.value) || 13 })}
+            placeholder="Zoom"
+          />
+        </div>
+      );
+    case "FORM":
+      return (
+        <div className="grid gap-2">
+          <Input
+            value={str(c.title)}
+            onChange={(e) => onContent({ title: e.target.value })}
+            placeholder="Form title"
+          />
+          <Input
+            value={str(c.submitLabel) || "Send"}
+            onChange={(e) => onContent({ submitLabel: e.target.value })}
+            placeholder="Submit label"
+          />
+        </div>
+      );
+    case "DONATION":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={str(c.title)}
+            onChange={(e) => onContent({ title: e.target.value })}
+            placeholder="Title"
+          />
+          <Input
+            value={Array.isArray(c.amounts) ? (c.amounts as number[]).join(",") : "3,5,10"}
+            onChange={(e) =>
+              onContent({
+                amounts: e.target.value
+                  .split(",")
+                  .map((s) => Number(s.trim()))
+                  .filter((n) => n > 0),
+              })
+            }
+            placeholder="3,5,10"
+          />
+        </div>
+      );
+    case "PRODUCT":
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={str(c.title)}
+            onChange={(e) => onContent({ title: e.target.value })}
+            placeholder="Product name"
+          />
+          <Input
+            type="number"
+            value={typeof c.priceMinor === "number" ? c.priceMinor : 1000}
+            onChange={(e) => onContent({ priceMinor: Number(e.target.value) || 0 })}
+            placeholder="Price (cents)"
+          />
+          <Input
+            className="md:col-span-2"
+            value={str(c.description)}
+            onChange={(e) => onContent({ description: e.target.value })}
+            placeholder="Description"
+          />
+        </div>
+      );
+    case "SOCIAL":
+      return (
+        <Textarea
+          value={
+            Array.isArray(c.items)
+              ? (c.items as { kind: string; href: string }[])
+                  .map((i) => `${i.kind}|${i.href}`)
+                  .join("\n")
+              : ""
+          }
+          onChange={(e) => {
+            const items = e.target.value
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const [kind, ...rest] = line.split("|");
+                return { kind: (kind || "twitter").trim(), href: rest.join("|").trim() };
+              });
+            onContent({ items });
+          }}
+          placeholder={"twitter|https://x.com/you\ngithub|https://github.com/you"}
+          rows={3}
+          className="font-mono text-xs"
+        />
+      );
+    default:
+      return (
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={block.label ?? str(c.label)}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(block.id, { label: v, content: { ...c, label: v } });
+            }}
+            placeholder={`${block.type.toLowerCase()} label`}
+          />
+          <Input
+            value={block.url ?? str(c.url)}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(block.id, { url: v, content: { ...c, url: v } });
+            }}
+            placeholder="https://example.com"
+          />
+        </div>
+      );
+  }
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function toLocalInput(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import argon2 from "argon2";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -108,7 +109,23 @@ async function main() {
     });
   }
 
+  console.log("[seed] demo admin (dev only)…");
+  const passwordHash = await argon2.hash("password123", { type: argon2.argon2id });
+  await prisma.user.upsert({
+    where: { email: "admin@linkforge.local" },
+    update: { passwordHash, role: "ADMIN" },
+    create: {
+      email: "admin@linkforge.local",
+      username: "admin-demo",
+      name: "Linkforge Admin",
+      passwordHash,
+      role: "ADMIN",
+      emailVerifiedAt: new Date(),
+    },
+  });
+
   console.log("[seed] done.");
+  console.log("[seed] demo login: admin@linkforge.local / password123");
 }
 
 main()

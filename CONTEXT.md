@@ -5,8 +5,7 @@
 > this top-to-bottom before doing anything. Then read `ARCHITECTURE.md` (system
 > design) and `DEPLOYMENT.md` (VPS guide).
 
-Last updated: **2026-05-07** by Devin session
-[`56ee684822e7436680adc10ba19d12b5`](https://app.devin.ai/sessions/56ee684822e7436680adc10ba19d12b5).
+Last updated: **2026-07-10** (v1.0 production feature pass).
 
 ---
 
@@ -15,10 +14,9 @@ Last updated: **2026-05-07** by Devin session
 - Goal: build **production-grade Linktree/Taplink/Beacons clone** branded as
   **Linkforge**, deployed at `https://linkforge.kebruni.me`
   (VPS `164.92.240.90`, SSH `:2222`, deploy user `nurbek`).
-- Approach: **phased delivery** — full feature set is months of work; we ship
-  MVP first, then layer in admin / billing / AI / monitoring / scale.
-- Status: **MVP scaffold merged.** Everything below in §3 marked ✅ is in the
-  repo. The first deploy to the VPS hasn't happened yet.
+- Status: **v1.0 product complete** (auth hardening, billing, short links, admin
+  actions, real email/webhook workers). Docker/image/compose ready.
+  **Live VPS cutover still needs SSH key + first `setup-vps` / `ssl-init` / `deploy`.**
 
 ---
 
@@ -80,132 +78,80 @@ asks:
 
 | Decision                                                                  | Why                                                                          |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **Phased delivery**                                                       | The full ask is 6–12 months of team work; MVP first, then admin/billing/AI.  |
+| **Phased delivery**                                                       | The full ask is 6–12 months of team work; ship solid core + monetization.    |
 | **Domain: `linkforge.kebruni.me`**                                        | User correction (was originally `together.kebruni.me`).                      |
-| **Repo: `kebruni/Linkforge`** (was migrated from `ayna12345123123/project`) | User asked for the code in their own repo.                                   |
-| **PR base = `base` branch** (not `main`)                                  | Empty repo, system blocks direct pushes to `main`. Rename `base`→`main` post-merge. |
+| **Repo: `kebruni/Linkforge`**                                             | User asked for the code in their own repo.                                   |
 | **Auth split:** `src/auth.config.ts` (edge) + `src/auth.ts` (Node)        | argon2 is native and can't run in the edge runtime used by `middleware.ts`.  |
 | **`serverExternalPackages` in `next.config.ts`**                          | Argon2/bullmq/ioredis/Prisma/pino can't be bundled into edge/RSC.            |
-| **`vitest run --passWithNoTests`**                                        | Test suite hasn't been written yet; CI shouldn't fail on empty.              |
-| **No Prisma migrations committed**                                        | Schema is final; first deploy must run `prisma migrate dev --name init`.     |
-| **Stripe/AI/admin/custom domains deferred**                               | Out of MVP scope — see §4 Roadmap.                                           |
-| **Telegram OAuth not in MVP**                                             | Telegram login widget needs separate domain + bot; v1.1 candidate.           |
+| **System fonts (no Google Fonts at build)**                               | Offline / firewalled builds fail on `next/font/google`; use CSS stacks.      |
+| **Dev Postgres on host `:5433`**                                          | Host often already has Postgres on `:5432`.                                  |
+| **Stripe optional at boot**                                               | `FEATURE_BILLING` + keys; UI degrades with clear messages when off.          |
+| **AI works without API key**                                              | Deterministic offline fallbacks; OpenAI when `OPENAI_API_KEY` set.           |
+| **Email without SMTP**                                                    | Worker logs the job; with SMTP it delivers via nodemailer.                   |
 
 ### 2a. Security caveats currently outstanding
 
-- The user shared **two different GitHub PATs** in plaintext chat (one for
-  `Linkforge-token` and one for `Linkforgev2`). User chose **not** to revoke.
-  Rotate when convenient: <https://github.com/settings/tokens>.
-- The PR target was set to `base` because pushing to `main` is blocked. The
-  user should rename `base` → `main` in GitHub repo settings after merge.
+- Historical note: PATs may have been shared in chat earlier. Rotate if still
+  active: <https://github.com/settings/tokens>.
+- Seed creates `admin@linkforge.local` / `password123` — **dev only**, never
+  use in production.
 
 ---
 
 ## 3. Status by section (✅ done / 🟡 partial / ⏳ todo)
 
-> Each row links to the file or directory where the work lives (for done /
-> partial). For "todo" rows, future agents should read the linked design doc
-> section.
-
-### MVP slice (all in `kebruni/Linkforge#1`)
+### Shipped in v1.0
 
 | #   | Section                | Status | Where                                                                                |
 | --- | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
-| 1   | Auth (basic)           | 🟡     | `src/auth.config.ts`, `src/auth.ts`, `src/middleware.ts`, `src/features/auth/*`      |
-| 2   | Dashboard (basic)      | 🟡     | `src/app/(dashboard)/*`, `src/features/dashboard/*`                                  |
-| 3   | Page builder (basic)   | 🟡     | `src/features/builder/*`, `src/components/builder/*`, `src/app/api/pages/[id]/*`    |
-| 4   | Design system          | 🟡     | `tailwind.config.ts`, `src/components/ui/*`, `src/styles/*`                          |
-| 5   | Analytics ingest       | 🟡     | `src/app/api/analytics/track/route.ts`, `worker/index.ts`, `prisma/schema.prisma`    |
-| 8   | SEO + perf             | 🟡     | `src/lib/seo.ts`, `src/app/u/[slug]/page.tsx`, `src/app/sitemap.ts`, `next.config.ts`|
-| 9   | Security (basic)       | 🟡     | `src/lib/rate-limit.ts`, `nginx/snippets/security-headers.conf`, `next.config.ts`    |
-| 11  | Database               | ✅     | `prisma/schema.prisma`, `prisma/seed.ts`                                             |
-| 12  | API (REST)             | 🟡     | `src/app/api/**`                                                                     |
-| 13  | File structure         | ✅     | repo root (feature-based, see `src/features/*`)                                      |
-| 14  | UI/UX                  | 🟡     | `src/components/*`, `src/app/(marketing)/page.tsx`                                   |
+| 1   | Auth                   | ✅     | credentials + OAuth, rate-limit, password reset, email verify, TOTP 2FA step-up      |
+| 2   | Dashboard              | ✅     | overview, pages, analytics, leads, short links, settings, AI                         |
+| 3   | Page builder           | ✅     | dnd, all palette blocks, inspectors, theme editor, live preview, QR                  |
+| 4   | Design system (basic)  | ✅     | Tailwind + shadcn tokens, dark/light, public theme tokens                            |
+| 5   | Analytics              | ✅     | track API + worker rollup + Recharts dashboard                                       |
+| 6   | AI (basic)             | ✅     | `/api/ai/generate` + studio UI, fallbacks + OpenAI                                   |
+| 7   | Monetization           | ✅     | Stripe Checkout (PRO sub), portal, webhooks, donation/product one-time checkout      |
+| 8   | SEO                    | ✅     | metadata helpers, JSON-LD, `sitemap.ts`, `robots.ts`                                 |
+| 9   | Security (core)        | ✅     | rate-limit, nginx headers, middleware RBAC, 2FA, audit log writes                    |
+| 10  | Admin                  | ✅     | overview, users (promote/suspend), feature flags                                     |
+| 11  | Database               | ✅     | full Prisma schema + `prisma/migrations/`                                            |
+| 12  | API (REST)             | ✅     | pages/blocks/theme/qr/me/forms/ai/analytics/billing/short-links/auth/admin           |
+| 13  | File structure         | ✅     | feature-based under `src/`                                                           |
+| 14  | UI/UX                  | ✅     | marketing + dashboard polish                                                         |
 | 15  | Landing page           | ✅     | `src/app/(marketing)/page.tsx`                                                       |
-| 17  | Production requirements| ✅     | `Dockerfile`, `docker-compose.{dev,prod}.yml`, `.github/workflows/*`                 |
-| 18  | Testing                | 🟡     | Vitest wired (`pnpm test`), no tests yet.                                            |
-| 19  | Performance            | 🟡     | Next 15 standalone build, Redis caching, code splitting via App Router.              |
-| 20  | Deployment             | ✅     | `nginx/`, `scripts/{setup-vps,ssl-init,deploy,backup-db,restore-db}.sh`, CI/CD       |
+| 16  | QR + forms + shorts    | ✅     | QR PNG; form leads; short-link CRUD + redirect                                       |
+| 17  | Production reqs        | ✅     | Docker, compose, nginx, CI/CD, scripts, email worker, webhook delivery               |
+| 18  | Testing (unit)         | ✅     | Vitest: utils + block schemas (`pnpm test`)                                          |
+| 19  | Performance (basic)    | ✅     | Redis, standalone Next build, App Router splitting                                   |
+| 20  | Deployment docs        | ✅     | `DEPLOYMENT.md` + scripts (first live deploy still pending)                          |
 
-### Deferred (post-MVP, on roadmap)
+### Deferred (post-v1.0)
 
 | #   | Section                | Status | Notes                                                                                  |
 | --- | ---------------------- | ------ | -------------------------------------------------------------------------------------- |
-| 1   | Auth (full)            | ⏳     | 2FA UI, device sessions list, suspicious-login email, OAuth Telegram. v1.1.           |
-| 2   | Dashboard (full)       | ⏳     | Realtime dashboard, heatmaps, conversion funnels. v1.2.                                |
-| 3   | Page builder (full)    | ⏳     | TikTok/Telegram/Spotify embeds, FAQ, countdown, gallery, testimonials, products, donations, map blocks. v1.1. |
-| 4   | Design system (full)   | ⏳     | Animated backgrounds, particles, custom fonts (Google Fonts loader), themes marketplace. v1.2. |
-| 5   | Analytics (full)       | ⏳     | UTM parsing, conversion analytics, realtime websocket dashboard. v1.1.                 |
-| 6   | AI features            | ⏳     | OpenAI-compatible API. Bio/theme/SEO/CTA/username generators. v1.2.                    |
-| 7   | Monetization           | ⏳     | Stripe (sub + Checkout + webhooks), coupons, affiliate, referral. v1.1.                |
-| 9   | Security (full)        | ⏳     | hCaptcha/Cloudflare Turnstile, full RBAC enforcement on every endpoint. v1.1.          |
-| 10  | Admin panel            | ⏳     | Users/bans/reports/payments/feature flags UI. v1.1.                                    |
-| 16  | Extra features         | ⏳     | QR generator (server route), short links UI, custom domains + ACME, Telegram bot, push notifications, A/B testing, scheduled posts. Spread across v1.1–v1.3. |
-| 18  | Testing (full)         | ⏳     | Unit (Vitest), integration (DB-backed), e2e (Playwright). v1.1.                        |
-| 19  | Performance (full)     | ⏳     | Edge image CDN, ISR for `/u/[slug]`, query plan review, k6 load tests. v1.2.           |
-| —   | Monitoring             | ⏳     | Grafana + Prometheus + Loki, uptime alerts. v1.2.                                      |
-| —   | k8s manifests          | ⏳     | Migrate from Compose to k8s for horizontal scaling. v1.3.                              |
+| 1   | Auth extras            | ⏳     | Device sessions list UI, suspicious-login email, OAuth Telegram.                       |
+| 5   | Analytics (full)       | ⏳     | UTM parsing UI, conversion funnels, realtime websocket.                                |
+| 7   | PayPal / coupons UI    | ⏳     | Coupon table exists; no admin coupon UI yet.                                           |
+| 9   | Captcha                | ⏳     | Turnstile/hCaptcha on public forms.                                                    |
+| 10  | Admin reports queue   | ⏳     | ContentReport model ready; moderation UI shallow.                                      |
+| 16  | Custom domains / bot   | ⏳     | ACME + nginx dynamic vhosts, Telegram bot, webhooks UI, A/B, marketplace.              |
+| 18  | Testing (e2e)          | ⏳     | Playwright e2e.                                                                        |
+| —   | Monitoring stack       | ⏳     | Grafana + Prometheus + Loki.                                                           |
 
 ---
 
-## 4. Roadmap (concrete next PRs)
+## 4. Roadmap
 
-Each item below should be **one PR** unless explicitly noted. PR titles in the
-table are suggested — match the existing style (`feat(linkforge): ...` /
-`chore(linkforge): ...`).
+### v1.1
 
-### v1.1 — production-readiness pass (~2–3 PRs each, ~4–6 weeks team time)
+1. **Custom domains** — DNS verify + ACME + nginx dynamic vhosts.
+2. **Playwright e2e** — register → create page → publish → public visit → track.
+3. **Device sessions UI** + login history.
+4. **First VPS deploy** — `setup-vps.sh` → `ssl-init.sh` → `deploy.sh`.
 
-1. **Stripe billing** — `feat(linkforge): stripe subscriptions + checkout + webhooks`
-   - Schema: already has `Subscription`, `Coupon`, `WebhookDelivery`. Need
-     migration + handlers.
-   - Routes: `/api/billing/checkout`, `/api/billing/webhook`, `/api/billing/portal`.
-   - UI: `/dashboard/billing`, plan picker, upgrade-CTA wiring on PRO blocks.
-2. **Custom domains** — `feat(linkforge): custom domains + ACME automation`
-   - Schema: `CustomDomain` already present.
-   - Need: ACME-DNS or HTTP-01 multi-domain cert issuance script, Nginx
-     dynamic vhost rendering, domain-verification token UI.
-3. **Admin panel** — `feat(linkforge): admin dashboard (users, reports, flags)`
-   - Routes under `/admin` already gated by `role === ADMIN`.
-   - Need: data tables (use `@tanstack/react-table`), audit-log viewer,
-     content-report queue, feature-flag UI.
-4. **Auth hardening** — `feat(linkforge): 2FA UI, device sessions, suspicious-login email`
-   - Schema already has `TotpSecret`, `RecoveryCode`, `AuthSession`.
-   - Need: TOTP enrollment flow, device list UI, new-device email template
-     + send via worker, per-IP login rate-limit + lockout.
-5. **Telegram OAuth** — `feat(linkforge): telegram login widget + callback`
-   - Need: `/api/auth/telegram/callback` HMAC verify, widget on login page.
-6. **Block library expansion** — `feat(linkforge): TikTok/Spotify/FAQ/countdown/gallery blocks`
-   - Add renderers + builder UIs for each.
-7. **Realtime analytics dashboard** — `feat(linkforge): realtime dashboard via SSE`
-   - Use Redis pub/sub. UI in `/dashboard` cards.
-8. **Test suite** — `chore(linkforge): vitest unit + playwright e2e`
-   - Start with: auth flow, page CRUD, public renderer, click tracking.
+### v1.2+
 
-### v1.2 — growth & scale features (~6–10 weeks)
-
-9. **AI features** — `feat(linkforge): ai bio/theme/seo/cta generators`
-   - Use OpenAI-compatible API (`AI_BASE_URL`, `AI_MODEL` envs already in
-     `.env.example`). Server actions, rate-limited per-user.
-10. **A/B testing** — `feat(linkforge): block-level a/b tests`
-    - Schema additions: `Experiment`, `Variant`, `Assignment`. Worker
-      computes winners.
-11. **Themes marketplace** — `feat(linkforge): public theme gallery + remixes`
-    - Use existing `Theme` model. Add public listing + remix flow.
-12. **Heatmaps + funnels** — `feat(linkforge): scroll/click heatmaps, conversion funnels`
-13. **Monitoring** — `chore(linkforge): grafana + prometheus + loki stack`
-    - Add to `docker-compose.prod.yml`. Pino → Loki via promtail.
-14. **Scheduled posts** — `feat(linkforge): schedule block visibility windows`
-15. **Push notifications** — `feat(linkforge): web push for new lead/comment events`
-
-### v1.3 — scale-out
-
-16. **k8s manifests** — `chore(linkforge): kubernetes manifests + helm chart`
-17. **Image CDN** — `feat(linkforge): cloudflare images / r2 + sharp pipeline`
-18. **ISR for `/u/[slug]`** — `perf(linkforge): incremental static regen for public pages`
-19. **Telegram bot** — `feat(linkforge): bot for lead notifications + page edits`
-20. **Affiliate / referral system** — `feat(linkforge): referrer attribution + payouts`
+See `ARCHITECTURE.md` §16 (AI optimiser, themes marketplace, k8s, etc.).
 
 ---
 
@@ -213,93 +159,72 @@ table are suggested — match the existing style (`feat(linkforge): ...` /
 
 ### VPS
 - IP: `164.92.240.90`
-- SSH: port `2222`, user `nurbek` (sudo, key-based auth)
-- OS: Ubuntu 24.04 LTS
-- Bootstrap: `scripts/setup-vps.sh` (Docker + UFW + fail2ban + SSH hardening)
-- TLS: `scripts/ssl-init.sh` (Let's Encrypt via certbot, auto-renew via cron)
-- Deploy: `scripts/deploy.sh` (zero-downtime via docker-compose pull + up -d)
+- SSH: port `2222`, user `nurbek`
+- Bootstrap: `scripts/setup-vps.sh`
+- TLS: `scripts/ssl-init.sh`
+- Deploy: `scripts/deploy.sh`
 
 ### Domains
 - Primary: `linkforge.kebruni.me` → `164.92.240.90`
-- Wildcard for custom-domains feature (v1.1): `*.linkforge.kebruni.me`
-- DNS instructions: `DEPLOYMENT.md` §1
 
-### GitHub Actions secrets required for deploy
-- `VPS_HOST=164.92.240.90`
-- `VPS_USER=nurbek`
-- `VPS_PORT=2222`
-- `VPS_SSH_KEY=<private key contents>`
-- `LETSENCRYPT_EMAIL=admin@kebruni.me`
+### Local dev notes
+- Postgres via compose: **host port 5433** → container 5432.
+- Demo admin after seed: `admin@linkforge.local` / `password123`
+- Gates: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
-### Tech stack pin (don't drift without good reason)
-- Node `>=20.10.0`, pnpm `9.12.3` (via `packageManager` in `package.json`).
-- Next.js `15.1.3`, React `19.0.0`, TypeScript `5.7.2`.
-- Prisma `5.22.0`, Postgres 16.
-- Redis 7 (BullMQ-compatible).
-- Auth.js `5.0.0-beta.25`.
+### Enable billing in prod
+```bash
+FEATURE_BILLING=true
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_PRO_MONTHLY=price_...
+STRIPE_PRICE_PRO_YEARLY=price_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
+```
+Webhook endpoint: `POST /api/billing/webhook`
+
+### Tech stack pin
+- Node `>=20.10.0`, pnpm `9.12.3`
+- Next.js `15.1.3`, React `19.0.0`, TypeScript `5.7.2`
+- Prisma `5.22.0`, Postgres 16, Redis 7, Auth.js `5.0.0-beta.25`
+- Stripe SDK, nodemailer (SMTP), otplib (TOTP)
 
 ---
 
-## 6. How to continue (concrete instructions for the next agent)
+## 6. How to continue
 
-1. **Read these in order:** this file → `ARCHITECTURE.md` → `DEPLOYMENT.md` →
-   `prisma/schema.prisma`.
-2. **Sanity-check the current scaffold runs locally:**
+1. Read this file → `ARCHITECTURE.md` → `DEPLOYMENT.md` → `prisma/schema.prisma`.
+2. Local boot:
    ```bash
    docker compose -f docker-compose.dev.yml up -d
    pnpm install
-   pnpm prisma migrate dev --name init   # NOTE: no migrations committed yet
+   cp .env.example .env   # AUTH_SECRET + DATABASE_URL :5433
+   pnpm prisma migrate dev
    pnpm prisma db seed
-   pnpm dev
-   pnpm worker  # in another terminal
+   pnpm dev               # + pnpm worker
    ```
-3. **Pick one PR from §4 Roadmap.** Don't try to do multiple at once.
-4. **Branch naming:** `devin/<unix-ts>-<descriptive-slug>` (matches what's
-   already in the repo).
-5. **Before opening a PR, locally:**
-   ```bash
-   pnpm lint && pnpm typecheck && pnpm test && pnpm build
-   ```
-   The CI workflow runs the same gates.
-6. **PR base = `main` after rename**, otherwise `base`. Never push directly
-   to `main`.
-7. **Update this file** at the end of your session — move done items from
-   the deferred table into the "MVP" table, append a "Last updated" line.
+3. Pick **one** v1.1 PR; don't boil the ocean.
+4. Update this file when shipping.
 
 ---
 
 ## 7. Open questions / blocked items
 
-- **Repo rename `base` → `main`.** Needs the user to do it in GitHub Settings →
-  Branches. After that, change CI/CD `branches: [main]` filters and the
-  `PR base` default.
-- **First deploy to the VPS hasn't happened.** Run `setup-vps.sh` →
-  `ssl-init.sh` → first `deploy.sh` from a workstation that has the deploy
-  SSH key. See `DEPLOYMENT.md` §2–4.
-- **No Prisma migrations committed.** Whoever runs the first deploy must
-  produce them via `prisma migrate dev --name init` and commit the
-  `prisma/migrations/` folder.
-- **Vitest has no test files.** Currently CI passes with `--passWithNoTests`.
-  v1.1 PR #8 should remove that flag and add real tests.
-- **Two GitHub PATs were leaked in chat.** User declined to revoke. Anyone
-  with chat-log access can push to `kebruni/Linkforge` until they're rotated.
+- **First deploy to the VPS hasn't happened from this machine** (no SSH key for
+  `nurbek@164.92.240.90:2222`). On the VPS: `setup-vps.sh` → clone to
+  `/srv/linkforge` → `.env.production` → `ssl-init.sh` → `deploy.sh`.
+- **GitHub secrets for Actions:** `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`.
+- **Default branch / push to `main`** needed for auto-deploy workflow.
+- **Stripe keys** required before real checkout works.
 
 ---
 
-## 8. Glossary (for new agents)
+## 8. Glossary
 
-- **Block** — atomic unit of a page (link, text, button, embed, form, etc.).
-  Stored in `Block` table, ordered by `position` within a `Page`.
-- **Page** — a user's link-in-bio page at `/u/<slug>`. Has many blocks, one
-  theme, optionally one custom domain.
-- **Theme** — visual config (colors, fonts, radius, preset). Stored on `Page`
-  via `themeJson` and reusable via `Theme` model.
-- **Reserved slug** — username/path that can't be claimed by users (e.g.
-  `admin`, `api`, `linkforge`). Seeded by `prisma/seed.ts`.
-- **Worker** — `worker/index.ts`. Drains the `analytics:stream` Redis stream,
-  enriches events with GEO/UA, and writes to `AnalyticsEvent` +
-  `AnalyticsDaily`.
-- **Edge-safe auth config** — `src/auth.config.ts`. Used by `middleware.ts`
-  (which runs at the Vercel/Next edge, no Node APIs).
-- **Node-only auth config** — `src/auth.ts`. Adds Credentials + argon2 +
-  Prisma adapter. Used by route handlers and server actions.
+- **Block** — atomic unit of a page (link, text, form, …) in `Block` table.
+- **Page** — `/u/<slug>` mini-landing.
+- **Theme** — visual tokens on `Theme` (also editable in builder).
+- **Worker** — `worker/index.ts` drains analytics stream / email / webhooks.
+- **Edge-safe auth** — `src/auth.config.ts` for middleware.
+- **Node auth** — `src/auth.ts` with Credentials + argon2.
+- **2FA step-up** — JWT `twoFactorPending` until `/api/auth/2fa/verify`.

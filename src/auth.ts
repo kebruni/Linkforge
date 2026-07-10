@@ -40,10 +40,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({
           where: { email: email.toLowerCase() },
         });
+        // Soft-deleted / suspended accounts cannot sign in
         if (!user || !user.passwordHash || user.deletedAt) return null;
 
-        const ok = await argon2.verify(user.passwordHash, password);
-        if (!ok) return null;
+        const passwordOk = await argon2.verify(user.passwordHash, password);
+        if (!passwordOk) return null;
 
         await prisma.user.update({
           where: { id: user.id },
@@ -68,12 +69,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.uid && (trigger === "signIn" || trigger === "update" || !token.role)) {
         const dbUser = await prisma.user.findUnique({
           where: { id: String(token.uid) },
-          select: { role: true, username: true, twoFactorEnabled: true },
+          select: {
+            role: true,
+            username: true,
+            twoFactorEnabled: true,
+            deletedAt: true,
+          },
         });
-        if (dbUser) {
-          token.role = dbUser.role;
-          token.username = dbUser.username;
-          token.twoFactorEnabled = dbUser.twoFactorEnabled;
+        if (!dbUser || dbUser.deletedAt) {
+          // Suspended / missing user — blank the session
+          token.uid = undefined;
+          return token;
+        }
+        token.role = dbUser.role;
+        token.username = dbUser.username;
+        token.twoFactorEnabled = dbUser.twoFactorEnabled;
+        if (trigger === "signIn" && dbUser.twoFactorEnabled && !token.twoFactorPassed) {
+          token.twoFactorPending = true;
         }
       }
       return token;

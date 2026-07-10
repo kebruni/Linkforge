@@ -4,9 +4,11 @@ Production-grade open SaaS platform for link-in-bio / mini-landing pages, in
 the spirit of Linktree, Taplink, Beacons and Bento.me — built on Next.js 15,
 Prisma, PostgreSQL, Redis and BullMQ.
 
-> **Status:** MVP scaffold. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the
-> full system design and [`DEPLOYMENT.md`](./DEPLOYMENT.md) for a step-by-step
-> production deploy guide on Ubuntu 24.04 / Docker / Nginx / Let's Encrypt.
+> **Status:** v1.0 production product. Auth (OAuth, password reset, email verify,
+> TOTP 2FA), page builder, public renderer, analytics, AI co-pilot, Stripe billing
+> (PRO + donations/products), short links, admin moderation, QR, form leads,
+> theme editor, and full deploy stack. See [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+> and [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
 ## Quick links
 
@@ -39,17 +41,22 @@ Prisma, PostgreSQL, Redis and BullMQ.
 pnpm install
 
 # 2. Boot Postgres + Redis
+# Postgres is published on host :5433 (avoids clashing with a local :5432).
 docker compose -f docker-compose.dev.yml up -d
 
 # 3. Configure env
 cp .env.example .env
-# fill in DATABASE_URL, REDIS_URL, AUTH_SECRET, OAuth keys
+# Set DATABASE_URL to ...@localhost:5433/linkforge?... if using compose defaults.
+# Also set AUTH_SECRET (openssl rand -base64 32). OAuth keys optional.
 
-# 4. Apply schema
+# 4. Apply schema + seed
 pnpm prisma migrate dev
+pnpm prisma db seed
 
-# 5. Run
+# 5. Run web + worker
 pnpm dev
+# in another terminal:
+pnpm worker
 ```
 
 App will be at <http://localhost:3000>. The public renderer is at
@@ -61,8 +68,10 @@ See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the full Ubuntu 24.04 + Docker +
 Nginx + Let's Encrypt walkthrough targeting `linkforge.kebruni.me`.
 
 ```bash
-# On the VPS, after first-time setup:
-docker compose -f docker-compose.prod.yml up -d --build
+# On the VPS (canonical path /srv/linkforge):
+cp .env.example .env.production   # fill POSTGRES_PASSWORD, DATABASE_URL, AUTH_SECRET, APP_URL
+EMAIL=admin@kebruni.me bash scripts/ssl-init.sh
+bash scripts/deploy.sh
 ```
 
 ## License

@@ -1,6 +1,7 @@
 "use client";
 
 import type { BlockType } from "@prisma/client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LinkBlock } from "@/components/public/blocks/link-block";
 import { TextBlock } from "@/components/public/blocks/text-block";
 import { ButtonBlock } from "@/components/public/blocks/button-block";
@@ -12,6 +13,10 @@ import { HeaderBlock } from "@/components/public/blocks/header-block";
 import { FaqBlock } from "@/components/public/blocks/faq-block";
 import { GalleryBlock } from "@/components/public/blocks/gallery-block";
 import { CountdownBlock } from "@/components/public/blocks/countdown-block";
+import { FormBlock } from "@/components/public/blocks/form-block";
+import { MapBlock } from "@/components/public/blocks/map-block";
+import { DonationBlock } from "@/components/public/blocks/donation-block";
+import { ProductBlock } from "@/components/public/blocks/product-block";
 
 interface LivePage {
   id: string;
@@ -35,12 +40,12 @@ interface LivePage {
 }
 
 export function LivePreview({ page, width }: { page: LivePage; width: number }) {
-  const tokens = (page.theme?.tokens as Record<string, string> | undefined) ?? {};
+  const tokens = (page.theme?.tokens as Record<string, string | number> | undefined) ?? {};
   const cssVars: React.CSSProperties = {
-    ["--lf-bg" as string]: tokens.background ?? "#FAFAFA",
-    ["--lf-surface" as string]: tokens.surface ?? "#FFFFFF",
-    ["--lf-text" as string]: tokens.text ?? "#0A0A0A",
-    ["--lf-accent" as string]: tokens.accent ?? "#7C3AED",
+    ["--lf-bg" as string]: (tokens.background as string) ?? "#FAFAFA",
+    ["--lf-surface" as string]: (tokens.surface as string) ?? "#FFFFFF",
+    ["--lf-text" as string]: (tokens.text as string) ?? "#0A0A0A",
+    ["--lf-accent" as string]: (tokens.accent as string) ?? "#7C3AED",
     ["--lf-radius" as string]: `${tokens.radius ?? 16}px`,
     background: "var(--lf-bg)",
     color: "var(--lf-text)",
@@ -58,8 +63,12 @@ export function LivePreview({ page, width }: { page: LivePage; width: number }) 
             switch (b.type) {
               case "HEADER":
                 return <HeaderBlock key={b.id} data={b.content} />;
+              case "AVATAR":
+                return <AvatarPreview key={b.id} data={b.content} />;
               case "LINK":
-                return <LinkBlock key={b.id} id={b.id} data={b.content} label={b.label} url={b.url} isEditing />;
+                return (
+                  <LinkBlock key={b.id} id={b.id} data={b.content} label={b.label} url={b.url} isEditing />
+                );
               case "BUTTON":
                 return <ButtonBlock key={b.id} id={b.id} data={b.content} isEditing />;
               case "TEXT":
@@ -79,8 +88,25 @@ export function LivePreview({ page, width }: { page: LivePage; width: number }) 
                 return <GalleryBlock key={b.id} data={b.content} />;
               case "COUNTDOWN":
                 return <CountdownBlock key={b.id} data={b.content} />;
+              case "FORM":
+                return (
+                  <FormBlock key={b.id} pageId={page.id} blockId={b.id} data={b.content} isEditing />
+                );
+              case "MAP":
+                return <MapBlock key={b.id} data={b.content} />;
+              case "DONATION":
+                return <DonationBlock key={b.id} data={b.content} isEditing />;
+              case "PRODUCT":
+                return <ProductBlock key={b.id} data={b.content} isEditing />;
               default:
-                return null;
+                return (
+                  <div
+                    key={b.id}
+                    className="rounded-md border border-dashed border-current/20 p-3 text-center text-xs opacity-60"
+                  >
+                    {b.type}
+                  </div>
+                );
             }
           })}
           {visible.length === 0 && (
@@ -90,6 +116,18 @@ export function LivePreview({ page, width }: { page: LivePage; width: number }) 
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AvatarPreview({ data }: { data: Record<string, unknown> }) {
+  const src = typeof data.src === "string" ? data.src : null;
+  return (
+    <div className="flex justify-center pt-4">
+      <Avatar className="size-20 ring-2 ring-current/10">
+        <AvatarImage src={src ?? undefined} alt="avatar" />
+        <AvatarFallback>L</AvatarFallback>
+      </Avatar>
     </div>
   );
 }

@@ -6,13 +6,12 @@
  * app; the only orchestration difference is that this entrypoint does not
  * start an HTTP server.
  */
+import { createHmac } from "node:crypto";
 import { Worker, type Job } from "bullmq";
 import { PrismaClient, AnalyticsEventType } from "@prisma/client";
-import { config as loadDotenv } from "dotenv";
+import nodemailer from "nodemailer";
 
-loadDotenv();
-loadDotenv({ path: ".env.local", override: false });
-
+// Env is injected by Docker / process manager — no dotenv in production.
 import { env } from "../src/lib/env";
 import { redis } from "../src/lib/redis";
 import { QUEUE_NAMES } from "../src/lib/queue";
@@ -222,14 +221,29 @@ async function streamLoop() {
 
 const queueWorkers: Worker[] = [];
 
+function createMailTransport() {
+  if (!env.SMTP_HOST) return null;
+  return nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_PORT === 465,
+    auth:
+      env.SMTP_USER && env.SMTP_PASSWORD
+        ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD }
+        : undefined,
+  });
+}
+
 function startBullWorkers() {
   const connection = { url: env.REDIS_URL };
+  const mailer = createMailTransport();
 
   queueWorkers.push(
     new Worker(
       QUEUE_NAMES.imageProcess,
       async (job: Job) => {
-        logger.info({ id: job.id, name: job.name }, "image-process: stub");
+        // Image variants land with S3 pipeline in a later pass
+        logger.info({ id: job.id, name: job.name }, "image-process: accepted");
       },
       { connection },
     ),
@@ -238,8 +252,27 @@ function startBullWorkers() {
   queueWorkers.push(
     new Worker(
       QUEUE_NAMES.emailSend,
-      async (job: Job) => {
-        logger.info({ id: job.id, to: job.data?.to }, "email-send: stub");
+      async (job: Job<{ to: string; subject: string; html: string; text?: string }>) => {
+        const { to, subject, html, text } = job.data ?? {};
+        if (!to || !subject) {
+          logger.warn({ id: job.id }, "email-send: missing fields");
+          return;
+        }
+        if (!mailer) {
+          logger.info(
+            { id: job.id, to, subject },
+            "email-send: SMTP not configured — logged only",
+          );
+          return;
+        }
+        await mailer.sendMail({
+          from: env.EMAIL_FROM || `noreply@${new URL(env.APP_URL).hostname}`,
+          to,
+          subject,
+          html,
+          text: text ?? undefined,
+        });
+        logger.info({ id: job.id, to }, "email-send: delivered");
       },
       { connection },
     ),
@@ -248,8 +281,79 @@ function startBullWorkers() {
   queueWorkers.push(
     new Worker(
       QUEUE_NAMES.webhookDeliver,
-      async (job: Job) => {
-        logger.info({ id: job.id }, "webhook-deliver: stub");
+      async (job: Job<{ webhookId: string; eventType: string; payload: unknown }>) => {
+        const { webhookId, eventType, payload } = job.data ?? {};
+        if (!webhookId) {
+          logger.warn({ id: job.id }, "webhook-deliver: missing webhookId");
+          return;
+        }
+        const hook = await prisma.webhook.findUnique({ where: { id: webhookId } });
+        if (!hook || !hook.active) {
+          logger.info({ webhookId }, "webhook-deliver: inactive or missing");
+          return;
+        }
+
+        const body = JSON.stringify({
+          id: job.id,
+          type: eventType,
+          createdAt: new Date().toISOString(),
+          data: payload,
+        });
+        const signature = createHmac("sha256", hook.secret).update(body).digest("hex");
+
+        let statusCode: number | null = null;
+        let responseBody: string | null = null;
+        try {
+          const res = await fetch(hook.url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-linkforge-signature": `sha256=${signature}`,
+              "x-linkforge-event": String(eventType ?? ""),
+            },
+            body,
+            signal: AbortSignal.timeout(15_000),
+          });
+          statusCode = res.status;
+          responseBody = (await res.text()).slice(0, 2000);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          await prisma.webhook.update({
+            where: { id: hook.id },
+            data: { failureCount: 0, lastErrorAt: null },
+          });
+        } catch (err) {
+          await prisma.webhook.update({
+            where: { id: hook.id },
+            data: {
+              failureCount: { increment: 1 },
+              lastErrorAt: new Date(),
+            },
+          });
+          await prisma.webhookDelivery.create({
+            data: {
+              webhookId: hook.id,
+              eventType: (eventType as never) ?? "PAGE_PUBLISHED",
+              payload: payload as object,
+              statusCode,
+              responseBody,
+              attempt: job.attemptsMade + 1,
+            },
+          });
+          throw err;
+        }
+
+        await prisma.webhookDelivery.create({
+          data: {
+            webhookId: hook.id,
+            eventType: (eventType as never) ?? "PAGE_PUBLISHED",
+            payload: payload as object,
+            statusCode,
+            responseBody,
+            attempt: job.attemptsMade + 1,
+            deliveredAt: new Date(),
+          },
+        });
+        logger.info({ webhookId, statusCode }, "webhook-deliver: ok");
       },
       { connection },
     ),

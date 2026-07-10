@@ -647,16 +647,19 @@ the full e2e suite.
 
 ## 16. Roadmap
 
-### MVP (this PR)
+### MVP (shipped)
 
 - [x] Repository scaffold + workspaces-ready layout
-- [x] Prisma schema (full v1)
-- [x] Auth.js (credentials + OAuth + email magic-link), TOTP 2FA
-- [x] Dashboard shell (pages list, settings, analytics placeholder)
-- [x] Page builder (blocks: link, text, button, image, embed, divider, social)
-- [x] Public renderer with SEO + JSON-LD + click tracking
-- [x] Redis-backed rate-limit + analytics ingest
-- [x] BullMQ worker scaffold + image / analytics-rollup jobs
+- [x] Prisma schema (full v1) + committed migrations
+- [x] Auth.js (credentials + OAuth providers), JWT sessions, rate-limits
+- [x] Dashboard (pages, analytics charts, leads inbox, settings, AI studio)
+- [x] Page builder (full block palette, inspectors, theme editor, QR, live preview)
+- [x] Public renderer with SEO + JSON-LD + click tracking + form blocks
+- [x] Redis-backed rate-limit + analytics ingest + BullMQ worker
+- [x] AI co-pilot (offline fallbacks + OpenAI-compatible API)
+- [x] Admin shell (`/admin` overview, users, feature flags)
+- [x] `sitemap.xml` + `robots.txt`
+- [x] Unit tests (Vitest)
 - [x] Docker Compose (dev + prod), Nginx config, Let's Encrypt
 - [x] GitHub Actions CI/CD with SSH zero-downtime deploy
 - [x] DEPLOYMENT.md + .env.example

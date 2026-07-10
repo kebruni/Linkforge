@@ -11,12 +11,13 @@ data
 postgres-data
 redis-data
 letsencrypt
+dist
 *.log
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
-Dockerfile
-docker-compose*.yml
 README.md
 ARCHITECTURE.md
 DEPLOYMENT.md
+CONTEXT.md

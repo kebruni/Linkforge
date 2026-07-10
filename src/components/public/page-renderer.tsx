@@ -12,16 +12,20 @@ import { HeaderBlock } from "./blocks/header-block";
 import { FaqBlock } from "./blocks/faq-block";
 import { GalleryBlock } from "./blocks/gallery-block";
 import { CountdownBlock } from "./blocks/countdown-block";
+import { FormBlock } from "./blocks/form-block";
+import { MapBlock } from "./blocks/map-block";
+import { DonationBlock } from "./blocks/donation-block";
+import { ProductBlock } from "./blocks/product-block";
 
 type PageWithRelations = Page & { blocks: Block[]; theme: Theme | null };
 
 export function PageRenderer({ page, isEditing = false }: { page: PageWithRelations; isEditing?: boolean }) {
-  const tokens = (page.theme?.tokens as Record<string, string> | undefined) ?? {};
+  const tokens = (page.theme?.tokens as Record<string, string | number> | undefined) ?? {};
   const cssVars: React.CSSProperties = {
-    ["--lf-bg" as string]: tokens.background ?? "#FAFAFA",
-    ["--lf-surface" as string]: tokens.surface ?? "#FFFFFF",
-    ["--lf-text" as string]: tokens.text ?? "#0A0A0A",
-    ["--lf-accent" as string]: tokens.accent ?? "#7C3AED",
+    ["--lf-bg" as string]: (tokens.background as string) ?? "#FAFAFA",
+    ["--lf-surface" as string]: (tokens.surface as string) ?? "#FFFFFF",
+    ["--lf-text" as string]: (tokens.text as string) ?? "#0A0A0A",
+    ["--lf-accent" as string]: (tokens.accent as string) ?? "#7C3AED",
     ["--lf-radius" as string]: `${tokens.radius ?? 16}px`,
   };
   const blocks = page.blocks.filter((b) => !b.hidden && !b.deletedAt).sort((a, b) => a.order - b.order);
@@ -33,7 +37,7 @@ export function PageRenderer({ page, isEditing = false }: { page: PageWithRelati
     >
       <div className="mx-auto flex max-w-md flex-col gap-3">
         {blocks.map((b) => (
-          <BlockSwitch key={b.id} block={b} isEditing={isEditing} />
+          <BlockSwitch key={b.id} block={b} pageId={page.id} isEditing={isEditing} />
         ))}
         {blocks.length === 0 && (
           <div className="rounded-2xl border border-dashed border-current/20 p-10 text-center text-sm opacity-70">
@@ -51,7 +55,15 @@ export function PageRenderer({ page, isEditing = false }: { page: PageWithRelati
   );
 }
 
-function BlockSwitch({ block, isEditing }: { block: Block; isEditing: boolean }) {
+function BlockSwitch({
+  block,
+  pageId,
+  isEditing,
+}: {
+  block: Block;
+  pageId: string;
+  isEditing: boolean;
+}) {
   const data = block.content as Record<string, unknown>;
   switch (block.type) {
     case BlockType.HEADER:
@@ -79,6 +91,14 @@ function BlockSwitch({ block, isEditing }: { block: Block; isEditing: boolean })
       return <GalleryBlock data={data} />;
     case BlockType.COUNTDOWN:
       return <CountdownBlock data={data} />;
+    case BlockType.FORM:
+      return <FormBlock pageId={pageId} blockId={block.id} data={data} isEditing={isEditing} />;
+    case BlockType.MAP:
+      return <MapBlock data={data} />;
+    case BlockType.DONATION:
+      return <DonationBlock data={data} pageId={pageId} blockId={block.id} isEditing={isEditing} />;
+    case BlockType.PRODUCT:
+      return <ProductBlock data={data} pageId={pageId} blockId={block.id} isEditing={isEditing} />;
     default:
       return null;
   }

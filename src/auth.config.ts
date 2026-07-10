@@ -11,7 +11,19 @@ declare module "next-auth" {
       role: "USER" | "PRO" | "ADMIN" | "SUPPORT";
       username: string;
       twoFactorEnabled: boolean;
+      twoFactorPending?: boolean;
     } & DefaultSession["user"];
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    uid?: string;
+    role?: "USER" | "PRO" | "ADMIN" | "SUPPORT";
+    username?: string;
+    twoFactorEnabled?: boolean;
+    twoFactorPending?: boolean;
+    twoFactorPassed?: boolean;
   }
 }
 
@@ -39,17 +51,12 @@ export const authConfig = {
   ],
   callbacks: {
     async session({ session, token }) {
-      const t = token as {
-        uid?: string;
-        role?: "USER" | "PRO" | "ADMIN" | "SUPPORT";
-        username?: string;
-        twoFactorEnabled?: boolean;
-      };
-      if (session.user && t.uid) {
-        session.user.id = String(t.uid);
-        session.user.role = t.role ?? "USER";
-        session.user.username = t.username ?? "";
-        session.user.twoFactorEnabled = Boolean(t.twoFactorEnabled);
+      if (session.user && token.uid) {
+        session.user.id = String(token.uid);
+        session.user.role = token.role ?? "USER";
+        session.user.username = token.username ?? "";
+        session.user.twoFactorEnabled = Boolean(token.twoFactorEnabled);
+        session.user.twoFactorPending = Boolean(token.twoFactorPending);
       }
       return session;
     },

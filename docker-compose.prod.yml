@@ -1,6 +1,9 @@
-# Production stack for a single VPS.  Postgres + Redis + Next.js + worker +
-# Nginx + certbot.  See DEPLOYMENT.md for the full bring-up procedure.
-version: "3.9"
+# Production stack for a single VPS.
+# Postgres + Redis + Next.js + worker + Nginx + certbot.
+# See DEPLOYMENT.md for the full bring-up procedure.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -8,27 +11,30 @@ x-app-env: &app-env
   REDIS_URL: ${REDIS_URL}
   AUTH_SECRET: ${AUTH_SECRET}
   AUTH_TRUST_HOST: "true"
-  APP_URL: ${APP_URL}
+  APP_URL: ${APP_URL:-https://linkforge.kebruni.me}
   PORT: 3000
-  AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID}
-  AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET}
-  AUTH_GITHUB_ID: ${AUTH_GITHUB_ID}
-  AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET}
-  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-  OPENAI_API_KEY: ${OPENAI_API_KEY}
-  S3_ENDPOINT: ${S3_ENDPOINT}
-  S3_REGION: ${S3_REGION}
-  S3_BUCKET: ${S3_BUCKET}
-  S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-  S3_SECRET_KEY: ${S3_SECRET_KEY}
-  S3_PUBLIC_URL: ${S3_PUBLIC_URL}
-  EMAIL_FROM: ${EMAIL_FROM}
-  SMTP_HOST: ${SMTP_HOST}
-  SMTP_PORT: ${SMTP_PORT}
-  SMTP_USER: ${SMTP_USER}
-  SMTP_PASSWORD: ${SMTP_PASSWORD}
+  AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+  AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+  AUTH_GITHUB_ID: ${AUTH_GITHUB_ID:-}
+  AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_REGION: ${S3_REGION:-auto}
+  S3_BUCKET: ${S3_BUCKET:-linkforge-assets}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  FEATURE_AI: ${FEATURE_AI:-true}
+  FEATURE_BILLING: ${FEATURE_BILLING:-false}
+  FEATURE_CUSTOM_DOMAINS: ${FEATURE_CUSTOM_DOMAINS:-false}
 
 services:
   postgres:
@@ -36,16 +42,17 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-linkforge}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-linkforge}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    networks: [internal]
+    networks: [linkforge]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linkforge}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linkforge} -d ${POSTGRES_DB:-linkforge}"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -56,11 +63,12 @@ services:
       - "yes"
       - "--maxmemory"
       - "${REDIS_MAXMEMORY:-512mb}"
+      # BullMQ requires noeviction (not allkeys-lru)
       - "--maxmemory-policy"
-      - "allkeys-lru"
+      - "noeviction"
     volumes:
       - redis-data:/data
-    networks: [internal]
+    networks: [linkforge]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -80,13 +88,19 @@ services:
         condition: service_healthy
     environment:
       <<: *app-env
-    networks: [internal]
+    networks: [linkforge]
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 8
+      start_period: 60s
 
   worker:
     image: linkforge:latest
@@ -94,10 +108,14 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    command: ["node", "/app/dist/worker/index.js"]
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: ["node", "dist/worker/index.js"]
     environment:
       <<: *app-env
-    networks: [internal]
+    networks: [linkforge]
 
   nginx:
     image: nginx:1.27-alpine
@@ -114,7 +132,7 @@ services:
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./letsencrypt/conf:/etc/letsencrypt:ro
       - ./letsencrypt/www:/var/www/certbot:ro
-    networks: [internal, public]
+    networks: [linkforge]
 
   certbot:
     image: certbot/certbot:latest
@@ -130,13 +148,12 @@ services:
           certbot renew --webroot --webroot-path=/var/www/certbot --quiet
           sleep 12h & wait $${!};
         done
+    networks: [linkforge]
 
 volumes:
   postgres-data:
   redis-data:
 
 networks:
-  internal:
-    internal: true
-  public:
+  linkforge:
     driver: bridge

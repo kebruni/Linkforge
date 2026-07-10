@@ -15,9 +15,9 @@ Target host:
 >
 > - GitHub Actions secrets (`DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`,
 >   `DEPLOY_SSH_KEY`, `LETSENCRYPT_EMAIL`, all `*_SECRET` and `*_KEY` envs).
-> - `/home/nurbek/linkforge/.env.production` on the VPS, owned by `nurbek`,
+> - `/srv/linkforge/.env.production` on the VPS, owned by `nurbek`,
 >   `chmod 600`. This file is **not** in git.
-> - `docker compose` reads it via `env_file:`.
+> - Deploy scripts use `docker compose … --env-file .env.production`.
 
 ---
 
@@ -109,15 +109,14 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 usermod -aG docker nurbek
 systemctl enable --now docker
 
-# 10) Disk locations
-install -d -o nurbek -g nurbek /home/nurbek/linkforge
-install -d -o nurbek -g nurbek /home/nurbek/linkforge/data/postgres
-install -d -o nurbek -g nurbek /home/nurbek/linkforge/data/redis
-install -d -o nurbek -g nurbek /home/nurbek/linkforge/data/letsencrypt
-install -d -o nurbek -g nurbek /home/nurbek/linkforge/backups
+# 10) Disk locations (canonical path: /srv/linkforge)
+install -d -o nurbek -g nurbek /srv/linkforge
+install -d -o nurbek -g nurbek /srv/linkforge/backups
+install -d -o nurbek -g nurbek /srv/linkforge/letsencrypt/conf
+install -d -o nurbek -g nurbek /srv/linkforge/letsencrypt/www
 ```
 
-The `scripts/setup-vps.sh` in this repo packages steps 2-10 idempotently so
+The `scripts/setup-vps.sh` in this repo packages steps 2–10 idempotently so
 they can be re-run safely.
 
 ---
@@ -128,38 +127,40 @@ From now on we work as `nurbek`:
 
 ```bash
 ssh -p 2222 nurbek@164.92.240.90
-cd /home/nurbek/linkforge
 
-# 1) Clone the repo (read-only deploy key recommended; HTTPS+PAT works too)
-git clone https://github.com/<owner>/<repo>.git app
-cd app
+# 1) Clone the repo into the app root (or pull if already cloned)
+git clone https://github.com/kebruni/Linkforge.git /srv/linkforge
+cd /srv/linkforge
 
 # 2) Create the production env file
 cp .env.example .env.production
 chmod 600 .env.production
-$EDITOR .env.production   # fill in DATABASE_URL, AUTH_SECRET, OAuth keys etc.
+# Required: POSTGRES_PASSWORD, DATABASE_URL (host = postgres),
+# REDIS_URL (host = redis), AUTH_SECRET, APP_URL
+# Optional billing: FEATURE_BILLING=true + Stripe keys + price IDs
+# Optional email: SMTP_* (password reset / verification)
+# See the production block at the bottom of .env.example
+$EDITOR .env.production
 
-# 3) Build and start everything
-docker compose -f docker-compose.prod.yml --env-file .env.production \
-    up -d --build
+# 3) First TLS cert (HTTP-only nginx → certbot → full HTTPS config)
+EMAIL=admin@kebruni.me bash scripts/ssl-init.sh
 
-# 4) Run database migrations (one-shot)
-docker compose -f docker-compose.prod.yml --env-file .env.production \
-    exec web pnpm prisma migrate deploy
+# 4) Build, migrate, start app + worker + nginx
+bash scripts/deploy.sh
 
-# 5) Optional seed (themes, reserved slugs, default templates)
+# 5) Optional seed (dev-ish themes / reserved slugs — skip on real prod if you prefer)
 docker compose -f docker-compose.prod.yml --env-file .env.production \
-    exec web pnpm prisma db seed
+    exec app node_modules/.bin/prisma db seed
 ```
 
 `docker-compose.prod.yml` brings up:
 
-- `web` – Next.js (port 3000, internal only)
-- `worker` – BullMQ workers
-- `postgres` – Postgres 16 (volume `data/postgres`)
-- `redis` – Redis 7 (volume `data/redis`, persistent AOF)
-- `nginx` – reverse proxy, terminating TLS, exposed on `:80` and `:443`
-- `certbot` – Let's Encrypt, runs in `--webroot` mode through nginx
+- `app` – Next.js (port 3000, Docker network only)
+- `worker` – BullMQ + analytics stream workers
+- `postgres` – Postgres 16 (named volume `postgres-data`)
+- `redis` – Redis 7 (named volume `redis-data`, AOF)
+- `nginx` – reverse proxy, TLS termination, `:80` + `:443`
+- `certbot` – Let's Encrypt renew loop (webroot)
 
 ---
 
@@ -202,67 +203,46 @@ openssl s_client -connect linkforge.kebruni.me:443 -servername linkforge.kebruni
 4. `pnpm test`
 5. `pnpm build`
 
-`.github/workflows/deploy.yml` runs on push to `main` after CI is green:
+`.github/workflows/deploy.yml` runs on push to `main` (or `workflow_dispatch`):
 
-1. Checkout + login to the registry (we publish a private image to GHCR).
-2. `docker buildx build --push` for `web` and `worker` images, tagged
-   `:sha-<short>` and `:latest`.
-3. SSH into the VPS (using `DEPLOY_SSH_KEY` stored as a GitHub secret), then:
-
-   ```bash
-   cd /home/nurbek/linkforge/app
-   git fetch --all --prune
-   git reset --hard origin/main          # always deploys what CI built
-   docker compose -f docker-compose.prod.yml --env-file .env.production \
-       pull web worker
-   docker compose -f docker-compose.prod.yml --env-file .env.production \
-       up -d --no-deps --build web worker
-   docker compose -f docker-compose.prod.yml --env-file .env.production \
-       exec -T web pnpm prisma migrate deploy
-   ```
-
-   `up -d --no-deps web worker` performs a **zero-downtime rolling restart**:
-   the new container starts and passes its health-check before the old one is
-   torn down, and Nginx continues to serve the old one in the meantime.
-
-4. On failure the workflow rolls back by retagging `:latest` to the previous
-   image and re-running `up -d --no-deps`.
+1. SSH into the VPS (GitHub secrets `VPS_HOST` / `VPS_USER` / `VPS_SSH_KEY` / `VPS_PORT`).
+2. Run `scripts/deploy.sh` at `/srv/linkforge` (git fetch → build → migrate → restart).
+3. Smoke-test `https://linkforge.kebruni.me/api/health`.
 
 Required GitHub Actions secrets:
 
-| Name                   | Used in                                             |
-| ---------------------- | --------------------------------------------------- |
-| `DEPLOY_HOST`          | `164.92.240.90`                                     |
-| `DEPLOY_PORT`          | `2222`                                              |
-| `DEPLOY_USER`          | `nurbek`                                            |
-| `DEPLOY_SSH_KEY`       | private key matching `nurbek`'s `authorized_keys`   |
-| `GHCR_TOKEN`           | PAT with `write:packages` if pushing images to GHCR |
-| `LETSENCRYPT_EMAIL`    | for first-time SSL bootstrap                        |
-| `AUTH_SECRET`, `STRIPE_*`, `OPENAI_API_KEY`, …    | injected into `.env.production` via the workflow if you prefer to manage them centrally |
+| Name            | Value                                              |
+| --------------- | -------------------------------------------------- |
+| `VPS_HOST`      | `164.92.240.90`                                    |
+| `VPS_PORT`      | `2222`                                             |
+| `VPS_USER`      | `nurbek`                                           |
+| `VPS_SSH_KEY`   | private key matching `nurbek`'s `authorized_keys`  |
+
+Application secrets live only in `/srv/linkforge/.env.production` on the VPS
+(not in GitHub), unless you later wire them into the workflow yourself.
 
 ---
 
 ## 6. Backups
 
-`scripts/backup-postgres.sh` is run nightly from cron on the host:
+`scripts/backup-db.sh` is run nightly from cron on the host:
 
 ```cron
 # crontab -e   (as nurbek)
-0 3 * * *  /home/nurbek/linkforge/app/scripts/backup-postgres.sh
+0 3 * * *  /srv/linkforge/scripts/backup-db.sh
 ```
 
 It performs:
 
-1. `docker compose exec -T postgres pg_dump -Fc -U linkforge linkforge`
-   piped to a timestamped file under `/home/nurbek/linkforge/backups/`.
+1. `docker compose exec -T postgres pg_dump …` piped to a gzipped file under
+   `/srv/linkforge/backups/`.
 2. Removes backups older than 14 days.
-3. Optionally `aws s3 cp` (or `rclone copy`) the dump to a remote bucket if
-   `BACKUP_REMOTE` is set in `.env.production`.
+3. Optionally uploads to S3 if `AWS_S3_BUCKET` is set.
 
 Restore:
 
 ```bash
-bash scripts/restore-postgres.sh /home/nurbek/linkforge/backups/2026-05-07.dump
+bash scripts/restore-db.sh /srv/linkforge/backups/linkforge-YYYYMMDDTHHMMSSZ.sql.gz
 ```
 
 ---
@@ -272,9 +252,10 @@ bash scripts/restore-postgres.sh /home/nurbek/linkforge/backups/2026-05-07.dump
 ### Logs
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f web
-docker compose -f docker-compose.prod.yml logs -f worker
-docker compose -f docker-compose.prod.yml logs -f nginx
+cd /srv/linkforge
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f app
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f worker
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f nginx
 journalctl -u docker -f
 fail2ban-client status sshd
 ```
@@ -287,15 +268,16 @@ fail2ban-client status sshd
 ### Shell into containers
 
 ```bash
-docker compose -f docker-compose.prod.yml exec web sh
-docker compose -f docker-compose.prod.yml exec postgres psql -U linkforge
-docker compose -f docker-compose.prod.yml exec redis redis-cli
+docker compose -f docker-compose.prod.yml --env-file .env.production exec app sh
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres psql -U linkforge
+docker compose -f docker-compose.prod.yml --env-file .env.production exec redis redis-cli
 ```
 
 ### Migrations
 
 ```bash
-docker compose -f docker-compose.prod.yml exec web pnpm prisma migrate deploy
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  exec app node_modules/.bin/prisma migrate deploy
 ```
 
 Never run `prisma migrate dev` against production — only `migrate deploy`.
@@ -303,11 +285,11 @@ Never run `prisma migrate dev` against production — only `migrate deploy`.
 ### Manual rollback
 
 ```bash
-cd /home/nurbek/linkforge/app
+cd /srv/linkforge
 git fetch --all
 git reset --hard <previous-good-sha>
 docker compose -f docker-compose.prod.yml --env-file .env.production \
-    up -d --no-deps --build web worker
+    up -d --no-deps --build app worker
 ```
 
 If you need to rollback Postgres schema, restore from backup (see §6).
@@ -315,8 +297,8 @@ If you need to rollback Postgres schema, restore from backup (see §6).
 ### Reload Nginx without downtime
 
 ```bash
-docker compose -f docker-compose.prod.yml exec nginx nginx -t \
- && docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+docker compose -f docker-compose.prod.yml --env-file .env.production exec nginx nginx -t \
+ && docker compose -f docker-compose.prod.yml --env-file .env.production exec nginx nginx -s reload
 ```
 
 ---
@@ -362,21 +344,18 @@ When the single-host setup becomes insufficient:
 ssh -p 2222 nurbek@164.92.240.90
 
 # Update to latest main and redeploy
-cd /home/nurbek/linkforge/app && \
-  git pull --ff-only && \
-  docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build && \
-  docker compose -f docker-compose.prod.yml --env-file .env.production exec -T web pnpm prisma migrate deploy
+cd /srv/linkforge && bash scripts/deploy.sh
 
-# Tail web logs
-docker compose -f docker-compose.prod.yml logs -f web
+# Tail app logs
+docker compose -f docker-compose.prod.yml --env-file .env.production logs -f app
 
 # Get into a Postgres shell
-docker compose -f docker-compose.prod.yml exec postgres psql -U linkforge
+docker compose -f docker-compose.prod.yml --env-file .env.production exec postgres psql -U linkforge
 
 # Backup now
-bash /home/nurbek/linkforge/app/scripts/backup-postgres.sh
+bash /srv/linkforge/scripts/backup-db.sh
 
 # Restart Nginx after editing config
-docker compose -f docker-compose.prod.yml exec nginx nginx -t && \
-  docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+docker compose -f docker-compose.prod.yml --env-file .env.production exec nginx nginx -t && \
+  docker compose -f docker-compose.prod.yml --env-file .env.production exec nginx nginx -s reload
 ```

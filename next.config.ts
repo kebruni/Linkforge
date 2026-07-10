@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  // Full node_modules image (Prisma migrate + BullMQ worker share the same
+  // image). `next start` is used in Docker — do not set output: "standalone".
   poweredByHeader: false,
   serverExternalPackages: ["argon2", "bullmq", "ioredis", "@prisma/client", "pino", "pino-pretty"],
   images: {
