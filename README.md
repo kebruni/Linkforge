@@ -19,9 +19,11 @@ pnpm security:audit     # optional stress/security harness
 
 ## Quick links
 
-- [Architecture & roadmap](./ARCHITECTURE.md)
+- [Roadmap & readiness (where we are)](./ROADMAP.md)
+- [Architecture](./ARCHITECTURE.md)
 - [Deployment guide](./DEPLOYMENT.md)
 - [Environment variables reference](./.env.example)
+- [Project handover context](./CONTEXT.md)
 
 ## Tech stack
 
