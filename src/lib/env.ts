@@ -61,6 +61,12 @@ const schema = z.object({
   SENTRY_DSN: z.string().optional().default(""),
 
   TRUSTED_ORIGINS: z.string().optional().default(""),
+  /**
+   * When true (production behind Nginx/Cloudflare), trust X-Forwarded-For /
+   * CF-Connecting-IP for rate limits. Keep false for local direct access so
+   * clients cannot spoof IPs to bypass rate limits.
+   */
+  TRUST_PROXY: stringFlag,
   RATE_LIMIT_WRITES_PER_MIN: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_PUBLIC_VIEWS_PER_MIN: z.coerce.number().int().positive().default(600),
 

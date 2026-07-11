@@ -31,6 +31,8 @@ export default async function EditPagePage({ params }: Params) {
         title: page.title,
         description: page.description,
         isPublished: page.isPublished,
+        isPrivate: page.isPrivate,
+        hasPassword: Boolean(page.passwordHash),
         blocks: page.blocks.map((b) => ({
           id: b.id,
           type: b.type,

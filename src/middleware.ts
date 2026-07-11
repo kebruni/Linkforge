@@ -36,7 +36,10 @@ export default auth(async (req) => {
       const resolveUrl = new URL("/api/internal/resolve-host", req.nextUrl.origin);
       resolveUrl.searchParams.set("host", host);
       const res = await fetch(resolveUrl, {
-        headers: { "x-forwarded-host": host },
+        headers: {
+          "x-forwarded-host": host,
+          "x-linkforge-internal": "1",
+        },
         // Edge fetch to same origin
         cache: "no-store",
       });

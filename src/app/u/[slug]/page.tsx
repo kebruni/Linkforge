@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Script from "next/script";
-import { unstable_cache } from "next/cache";
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
@@ -9,6 +9,8 @@ import { buildMetadata, jsonLdPerson } from "@/lib/seo";
 import { PageRenderer } from "@/components/public/page-renderer";
 import { PaidBanner } from "@/components/public/paid-banner";
 import { ReportPageButton } from "@/features/public/report-page-button";
+import { PrivatePageGate } from "@/features/public/private-page-gate";
+import { unlockCookieName, verifyUnlockToken } from "@/lib/page-unlock";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,26 +19,29 @@ interface Params {
   params: Promise<{ slug: string }>;
 }
 
-const fetchPage = unstable_cache(
-  async (slug: string) => {
-    const page = await prisma.page.findFirst({
-      where: { slug, isPublished: true, deletedAt: null },
-      include: {
-        blocks: { where: { deletedAt: null }, orderBy: { order: "asc" } },
-        theme: true,
-        user: { select: { username: true, name: true, avatarUrl: true } },
-      },
-    });
-    return page;
-  },
-  ["public-page"],
-  { tags: ["public-page"], revalidate: 60 },
-);
+async function fetchPage(slug: string) {
+  return prisma.page.findFirst({
+    where: { slug, isPublished: true, deletedAt: null },
+    include: {
+      blocks: { where: { deletedAt: null }, orderBy: { order: "asc" } },
+      theme: true,
+      user: { select: { username: true, name: true, avatarUrl: true } },
+    },
+  });
+}
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const page = await fetchPage(slug);
   if (!page) return { title: "Not found" };
+  if (page.isPrivate) {
+    return buildMetadata({
+      title: "Private page",
+      description: "This page is password-protected.",
+      canonical: `${env.APP_URL}/u/${page.slug}`,
+      noIndex: true,
+    });
+  }
   return buildMetadata({
     title: page.title,
     description: page.description ?? `${page.user.name ?? page.user.username} on Linkforge`,
@@ -49,6 +54,19 @@ export default async function PublicPage({ params }: Params) {
   const { slug } = await params;
   const page = await fetchPage(slug);
   if (!page) notFound();
+
+  // Private pages require unlock cookie (set after password check)
+  if (page.isPrivate) {
+    if (!page.passwordHash) {
+      // Misconfigured private page — do not leak content
+      notFound();
+    }
+    const jar = await cookies();
+    const token = jar.get(unlockCookieName(page.id))?.value;
+    if (!verifyUnlockToken(page.id, token)) {
+      return <PrivatePageGate pageId={page.id} title={page.title} />;
+    }
+  }
 
   const ld = jsonLdPerson({
     name: page.user.name ?? page.user.username,

@@ -7,7 +7,6 @@ import { z } from "zod";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveFromHeaders } from "@/lib/geo";
 import {
   getStripe,
   isBillingConfigured,
@@ -15,17 +14,16 @@ import {
 } from "@/lib/stripe";
 import { makeDemoToken } from "@/lib/billing-demo";
 import { env } from "@/lib/env";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
-/** Prefer request origin so LAN IP access works; fall back to APP_URL. */
-function publicOrigin(req: Request): string {
-  const proto = req.headers.get("x-forwarded-proto");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  if (host) {
-    const scheme = proto ?? (host.includes("localhost") || host.startsWith("127.") ? "http" : "http");
-    return `${scheme}://${host}`;
-  }
+/**
+ * Canonical app origin for Stripe return URLs.
+ * Never trust Host / X-Forwarded-Host (open-redirect / phishing risk).
+ * Local LAN testing can set APP_URL to the LAN address.
+ */
+function publicOrigin(_req: Request): string {
   return env.APP_URL.replace(/\/$/, "");
 }
 
@@ -45,7 +43,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const ip = resolveFromHeaders(new Headers(req.headers)).ip ?? "unknown";
+  const ip = clientIp(new Headers(req.headers));
   const rl = await rateLimit(`billing:onetime:${ip}`, 20, 10);
   if (!rl.ok) return errors.tooMany();
 

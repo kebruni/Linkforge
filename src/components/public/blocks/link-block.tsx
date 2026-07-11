@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { safeHref } from "@/lib/url-safety";
 
 export function LinkBlock({
   id,
@@ -14,13 +15,14 @@ export function LinkBlock({
   isEditing: boolean;
 }) {
   const finalLabel = label ?? (typeof data.label === "string" ? data.label : "Link");
-  const finalUrl = url ?? (typeof data.url === "string" ? data.url : "#");
+  const raw = url ?? (typeof data.url === "string" ? data.url : "#");
+  const finalUrl = safeHref(raw, "#");
   const props: Record<string, unknown> = isEditing
     ? { onClick: (e: React.MouseEvent) => e.preventDefault(), href: "#", role: "link" }
     : {
         href: finalUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
+        target: finalUrl.startsWith("mailto:") ? undefined : "_blank",
+        rel: "noopener noreferrer nofollow",
         "data-track-block-id": id,
       };
   return (

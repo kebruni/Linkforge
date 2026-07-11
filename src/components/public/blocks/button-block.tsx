@@ -1,3 +1,5 @@
+import { safeHref } from "@/lib/url-safety";
+
 export function ButtonBlock({
   id,
   data,
@@ -8,7 +10,7 @@ export function ButtonBlock({
   isEditing: boolean;
 }) {
   const label = typeof data.label === "string" ? data.label : "Button";
-  const url = typeof data.url === "string" ? data.url : "#";
+  const url = safeHref(typeof data.url === "string" ? data.url : "#", "#");
   const variant = (data.variant as string) ?? "primary";
   const styles =
     variant === "outline"
@@ -19,8 +21,8 @@ export function ButtonBlock({
   return (
     <a
       href={isEditing ? "#" : url}
-      target={isEditing ? undefined : "_blank"}
-      rel="noopener noreferrer"
+      target={isEditing || url.startsWith("mailto:") ? undefined : "_blank"}
+      rel="noopener noreferrer nofollow"
       data-track-block-id={id}
       onClick={isEditing ? (e) => e.preventDefault() : undefined}
       className={`flex items-center justify-center rounded-[var(--lf-radius)] px-6 py-3 text-sm font-semibold shadow-sm ${styles}`}

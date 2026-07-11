@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
 import { shortLinkLimitFor } from "@/lib/plan";
+import { assertSafePublicUrl } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,8 @@ function generateCode(len = 7) {
 }
 
 const createSchema = z.object({
-  url: z.string().url().max(2048),
+  // Accept string then validate with our SSRF/XSS allowlist (z.string().url allows javascript: in some cases via URL parser quirks)
+  url: z.string().min(1).max(2048),
   pageId: z.string().optional(),
   code: z
     .string()
@@ -74,6 +76,11 @@ export async function POST(req: Request) {
     return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
   }
 
+  const safeUrl = assertSafePublicUrl(parsed.data.url);
+  if (!safeUrl.ok) {
+    return errors.badRequest(safeUrl.reason);
+  }
+
   if (parsed.data.pageId) {
     const page = await prisma.page.findFirst({
       where: { id: parsed.data.pageId, userId: session.user.id, deletedAt: null },
@@ -93,7 +100,7 @@ export async function POST(req: Request) {
   const link = await prisma.shortLink.create({
     data: {
       code,
-      url: parsed.data.url,
+      url: safeUrl.url,
       userId: session.user.id,
       pageId: parsed.data.pageId,
     },

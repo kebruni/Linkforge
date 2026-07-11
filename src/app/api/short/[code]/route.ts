@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { resolveFromHeaders } from "@/lib/geo";
 import { sha256Hex } from "@/lib/crypto";
+import { assertSafePublicUrl } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,12 @@ export async function GET(req: Request, { params }: Ctx) {
   });
   if (!link) {
     return new Response("Not found", { status: 404 });
+  }
+
+  // Defense-in-depth: never redirect to unsafe schemes / private hosts
+  const safe = assertSafePublicUrl(link.url);
+  if (!safe.ok) {
+    return new Response("Link blocked (unsafe destination)", { status: 400 });
   }
 
   // Fire-and-forget: increment hit counter + push event
@@ -44,5 +51,5 @@ export async function GET(req: Request, { params }: Ctx) {
   }
   void redis.xadd("analytics:stream", "MAXLEN", "~", "100000", "*", ...args).catch(() => undefined);
 
-  redirect(link.url);
+  redirect(safe.url);
 }

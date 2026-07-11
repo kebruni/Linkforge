@@ -43,18 +43,6 @@ export async function POST(req: Request) {
   const rl = await rateLimit(`pages:create:${session.user.id}`, 10, env.RATE_LIMIT_WRITES_PER_MIN);
   if (!rl.ok) return errors.tooMany();
 
-  const limit = pageLimitFor(session.user.role);
-  if (Number.isFinite(limit)) {
-    const count = await prisma.page.count({
-      where: { userId: session.user.id, deletedAt: null },
-    });
-    if (count >= limit) {
-      return errors.forbidden(
-        `Free plan allows ${limit} pages. Upgrade to PRO for unlimited pages.`,
-      );
-    }
-  }
-
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
@@ -81,47 +69,80 @@ export async function POST(req: Request) {
   const existing = await prisma.page.findUnique({ where: { slug }, select: { id: true } });
   if (existing) return errors.conflict("Slug already taken — pick another");
 
-  const page = await prisma.page.create({
-    data: {
-      userId: session.user.id,
-      title,
-      slug,
-      theme: {
-        create: {
-          presetKey: "minimal-light",
-          tokens: {
-            background: "#FAFAFA",
-            surface: "#FFFFFF",
-            text: "#0A0A0A",
-            accent: "#7C3AED",
-            radius: 16,
-            font: "Inter",
+  const limit = pageLimitFor(session.user.role);
+  const userId = session.user.id;
+  const username = session.user.username;
+
+  // Freemium gate under row lock — prevents concurrent create races
+  let page: { id: string; slug: string; title: string };
+  try {
+    page = await prisma.$transaction(async (tx) => {
+      // Lock user row so concurrent page creates serialize on the same account
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+
+      if (Number.isFinite(limit)) {
+        const count = await tx.page.count({
+          where: { userId, deletedAt: null },
+        });
+        if (count >= limit) {
+          throw new Error("PAGE_LIMIT");
+        }
+      }
+
+      return tx.page.create({
+        data: {
+          userId,
+          title,
+          slug,
+          theme: {
+            create: {
+              presetKey: "minimal-light",
+              tokens: {
+                background: "#FAFAFA",
+                surface: "#FFFFFF",
+                text: "#0A0A0A",
+                accent: "#7C3AED",
+                radius: 16,
+                font: "Inter",
+              },
+            },
+          },
+          blocks: {
+            createMany: {
+              data: [
+                {
+                  type: "AVATAR",
+                  order: 0,
+                  content: { src: null },
+                },
+                {
+                  type: "HEADER",
+                  order: 1,
+                  content: { title, subtitle: `@${username}` },
+                },
+              ],
+            },
           },
         },
-      },
-      blocks: {
-        createMany: {
-          data: [
-            {
-              type: "AVATAR",
-              order: 0,
-              content: { src: null },
-            },
-            {
-              type: "HEADER",
-              order: 1,
-              content: { title, subtitle: `@${session.user.username}` },
-            },
-          ],
-        },
-      },
-    },
-    select: { id: true, slug: true, title: true },
-  });
+        select: { id: true, slug: true, title: true },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "PAGE_LIMIT") {
+      return errors.forbidden(
+        `Free plan allows ${limit} pages. Upgrade to PRO for unlimited pages.`,
+      );
+    }
+    // Unique slug race
+    if (typeof err === "object" && err && "code" in err && (err as { code: string }).code === "P2002") {
+      return errors.conflict("Slug already taken — pick another");
+    }
+    throw err;
+  }
 
   await writeAudit({
     action: "PAGE_CREATED",
-    userId: session.user.id,
+    userId,
     targetId: page.id,
     meta: { slug: page.slug },
   });

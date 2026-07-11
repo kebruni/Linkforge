@@ -5,6 +5,7 @@ import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
+import { assertSafePublicUrl, sanitizeBlockContentUrls } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
@@ -41,13 +42,27 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
 
+  let nextUrl = parsed.data.url;
+  if (typeof nextUrl === "string" && nextUrl.length > 0) {
+    const safe = assertSafePublicUrl(nextUrl, { allowMailto: true });
+    if (!safe.ok) return errors.badRequest(safe.reason);
+    nextUrl = safe.url;
+  }
+
+  let nextContent = parsed.data.content;
+  if (nextContent) {
+    const sanitized = sanitizeBlockContentUrls(nextContent);
+    if (!sanitized.ok) return errors.badRequest(sanitized.reason);
+    nextContent = sanitized.content;
+  }
+
   const block = await prisma.block.update({
     where: { id: blockId },
     data: {
       label: parsed.data.label === null ? null : parsed.data.label,
-      url: parsed.data.url === null ? null : parsed.data.url,
+      url: nextUrl === null ? null : nextUrl,
       hidden: parsed.data.hidden,
-      content: parsed.data.content as never,
+      content: nextContent as never,
     },
     select: {
       id: true,

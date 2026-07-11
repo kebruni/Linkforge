@@ -1,32 +1,45 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
+import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const checks = {
-    ok: true as boolean,
-    db: false,
-    redis: false,
-    uptime: process.uptime(),
-    version: process.env.npm_package_version ?? "0.0.0",
-  };
+  let db = false;
+  let redisOk = false;
 
   try {
     await prisma.$queryRaw`SELECT 1`;
-    checks.db = true;
+    db = true;
   } catch {
-    checks.ok = false;
+    /* unhealthy */
   }
 
   try {
     await redis.ping();
-    checks.redis = true;
+    redisOk = true;
   } catch {
-    checks.ok = false;
+    /* unhealthy */
   }
 
-  return NextResponse.json(checks, { status: checks.ok ? 200 : 503 });
+  const ok = db && redisOk;
+
+  // Minimal public payload — avoid leaking stack versions / uptime to the internet.
+  // Detailed diagnostics only in non-production.
+  if (env.NODE_ENV === "production") {
+    return NextResponse.json({ ok }, { status: ok ? 200 : 503 });
+  }
+
+  return NextResponse.json(
+    {
+      ok,
+      db,
+      redis: redisOk,
+      uptime: process.uptime(),
+      version: process.env.npm_package_version ?? "0.0.0",
+    },
+    { status: ok ? 200 : 503 },
+  );
 }

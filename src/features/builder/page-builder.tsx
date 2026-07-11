@@ -57,6 +57,8 @@ type EditorPage = {
   title: string;
   description: string | null;
   isPublished: boolean;
+  isPrivate: boolean;
+  hasPassword: boolean;
   blocks: EditorBlock[];
   theme: { tokens: Record<string, unknown> } | null;
 };
@@ -74,6 +76,8 @@ export function PageBuilder({ page }: { page: EditorPage }) {
   const [title, setTitle] = useState(page.title);
   const [description, setDescription] = useState(page.description ?? "");
   const [isPublished, setIsPublished] = useState(page.isPublished);
+  const [isPrivate, setIsPrivate] = useState(page.isPrivate);
+  const [pagePassword, setPagePassword] = useState("");
   const [blocks, setBlocks] = useState<EditorBlock[]>(page.blocks);
   const [theme, setTheme] = useState<ThemeTokens>(() => ({
     ...DEFAULT_THEME,
@@ -137,11 +141,25 @@ export function PageBuilder({ page }: { page: EditorPage }) {
 
   function savePage() {
     startTransition(async () => {
+      if (isPrivate && !page.hasPassword && pagePassword.length < 4) {
+        toast({
+          variant: "destructive",
+          title: "Private page needs a password",
+          description: "Set a page password (min 4 chars) when enabling private mode.",
+        });
+        return;
+      }
       const [pageRes, themeRes] = await Promise.all([
         fetch(`/api/pages/${page.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ title, description, isPublished }),
+          body: JSON.stringify({
+            title,
+            description,
+            isPublished,
+            isPrivate,
+            ...(pagePassword ? { pagePassword } : {}),
+          }),
         }),
         fetch(`/api/pages/${page.id}/theme`, {
           method: "PATCH",
@@ -320,9 +338,9 @@ export function PageBuilder({ page }: { page: EditorPage }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>SEO</CardTitle>
+            <CardTitle>SEO & privacy</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="desc">Description</Label>
               <Textarea
@@ -332,6 +350,27 @@ export function PageBuilder({ page }: { page: EditorPage }) {
                 placeholder="What this page is about — used in OpenGraph & Twitter cards."
               />
             </div>
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+              <Switch checked={isPrivate} onCheckedChange={setIsPrivate} id="private" />
+              <Label htmlFor="private" className="text-sm">
+                Password-protect public page
+              </Label>
+            </div>
+            {isPrivate && (
+              <div className="space-y-2">
+                <Label htmlFor="page-pw">
+                  Page password{page.hasPassword ? " (leave blank to keep)" : ""}
+                </Label>
+                <Input
+                  id="page-pw"
+                  type="password"
+                  value={pagePassword}
+                  onChange={(e) => setPagePassword(e.target.value)}
+                  placeholder={page.hasPassword ? "••••••••" : "min 4 characters"}
+                  minLength={page.hasPassword ? 0 : 4}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 

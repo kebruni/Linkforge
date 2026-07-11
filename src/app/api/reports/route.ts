@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveFromHeaders } from "@/lib/geo";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -24,8 +24,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const ipInfo = resolveFromHeaders(new Headers(req.headers));
-  const ipKey = ipInfo.ip ?? "unknown";
+  const ipKey = clientIp(new Headers(req.headers));
   const rl = await rateLimit(`reports:create:${ipKey}`, 5, 10);
   if (!rl.ok) return errors.tooMany();
 

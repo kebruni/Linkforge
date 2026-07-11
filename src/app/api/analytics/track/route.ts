@@ -7,6 +7,7 @@ import { resolveFromHeaders, isLikelyBot } from "@/lib/geo";
 import { sha256Hex } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -36,16 +37,23 @@ export async function POST(req: Request) {
     return ok({ ignored: true });
   }
 
-  const ipKey = geo.ip ?? "unknown";
-  const rl = await rateLimit(`track:${ipKey}`, 30, env.RATE_LIMIT_PUBLIC_VIEWS_PER_MIN);
-  if (!rl.ok) return errors.tooMany();
+  const ipKey = clientIp(headers);
+  // Global soft cap + per-IP (when TRUST_PROXY) to resist XFF rotation floods
+  const [rlIp, rlGlobal] = await Promise.all([
+    rateLimit(`track:${ipKey}`, 40, env.RATE_LIMIT_PUBLIC_VIEWS_PER_MIN),
+    rateLimit(`track:global`, 2000, 6000),
+  ]);
+  if (!rlIp.ok || !rlGlobal.ok) return errors.tooMany();
 
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) return errors.badRequest("Invalid event");
 
-  // Anonymous, rotating per-IP visitor id (24h TTL)
-  const visitorId = geo.ip ? sha256Hex(`${geo.ip}:${new Date().toISOString().slice(0, 10)}`).slice(0, 16) : null;
+  // Anonymous visitor id from trusted IP only (never spoofed XFF when TRUST_PROXY=false)
+  const trustedIp = ipKey !== "local" ? ipKey : null;
+  const visitorId = trustedIp
+    ? sha256Hex(`${trustedIp}:${new Date().toISOString().slice(0, 10)}`).slice(0, 16)
+    : null;
 
   const payload = {
     ts: Date.now(),
@@ -53,7 +61,7 @@ export async function POST(req: Request) {
     pageId: parsed.data.pageId,
     blockId: parsed.data.blockId ?? "",
     visitorId: visitorId ?? "",
-    ipHash: geo.ip ? sha256Hex(geo.ip) : "",
+    ipHash: trustedIp ? sha256Hex(trustedIp) : "",
     country: geo.country,
     device: geo.device,
     os: geo.os,

@@ -16,6 +16,7 @@ import { env } from "../src/lib/env";
 import { redis } from "../src/lib/redis";
 import { QUEUE_NAMES } from "../src/lib/queue";
 import { logger } from "../src/lib/logger";
+import { assertSafeWebhookUrl } from "../src/lib/url-safety";
 
 const prisma = new PrismaClient({ log: ["error"] });
 
@@ -293,6 +294,16 @@ function startBullWorkers() {
           return;
         }
 
+        const safeUrl = assertSafeWebhookUrl(hook.url);
+        if (!safeUrl.ok) {
+          logger.warn({ webhookId, reason: safeUrl.reason }, "webhook-deliver: blocked unsafe URL");
+          await prisma.webhook.update({
+            where: { id: hook.id },
+            data: { active: false, failureCount: { increment: 1 }, lastErrorAt: new Date() },
+          });
+          return;
+        }
+
         const body = JSON.stringify({
           id: job.id,
           type: eventType,
@@ -304,7 +315,7 @@ function startBullWorkers() {
         let statusCode: number | null = null;
         let responseBody: string | null = null;
         try {
-          const res = await fetch(hook.url, {
+          const res = await fetch(safeUrl.url, {
             method: "POST",
             headers: {
               "content-type": "application/json",

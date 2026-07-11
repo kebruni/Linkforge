@@ -4,12 +4,12 @@ import { z } from "zod";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveFromHeaders } from "@/lib/geo";
 import { isValidSlug, slugify } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { issueToken } from "@/lib/tokens";
 import { sendEmailVerification } from "@/lib/email";
 import { writeAudit } from "@/lib/audit";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -27,8 +27,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const ipInfo = resolveFromHeaders(new Headers(req.headers));
-  const ipKey = ipInfo.ip ?? "unknown";
+  const ipKey = clientIp(new Headers(req.headers));
 
   const rl = await rateLimit(`auth:register:${ipKey}`, 5, 5);
   if (!rl.ok) return errors.tooMany();

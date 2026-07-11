@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // Optional first-party coupon (percent-off via Stripe coupons created on the fly)
+  // Optional first-party coupon — do NOT increment redemptions until webhook success
   let discounts: { coupon: string }[] | undefined;
   let couponMeta: string | undefined;
   if (parsed.data.couponCode) {
@@ -97,10 +97,6 @@ export async function POST(req: Request) {
     });
     discounts = [{ coupon: stripeCoupon.id }];
     couponMeta = coupon.id;
-    await prisma.coupon.update({
-      where: { id: coupon.id },
-      data: { redemptions: { increment: 1 } },
-    });
   }
 
   const checkout = await stripe.checkout.sessions.create({

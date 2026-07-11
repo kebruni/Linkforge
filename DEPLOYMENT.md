@@ -137,6 +137,7 @@ cp .env.example .env.production
 chmod 600 .env.production
 # Required: POSTGRES_PASSWORD, DATABASE_URL (host = postgres),
 # REDIS_URL (host = redis), AUTH_SECRET, APP_URL
+# Security (prod): TRUST_PROXY=true (behind Nginx), FEATURE_BILLING_DEMO=false
 # Optional billing: FEATURE_BILLING=true + Stripe keys + price IDs
 # Optional email: SMTP_* (password reset / verification)
 # See the production block at the bottom of .env.example

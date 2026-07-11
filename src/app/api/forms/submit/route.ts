@@ -9,6 +9,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { verifyTurnstile, isTurnstileEnabled } from "@/lib/turnstile";
 import { dispatchUserWebhooks } from "@/lib/webhooks";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -20,8 +21,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const ipInfo = resolveFromHeaders(new Headers(req.headers));
-  const ipKey = ipInfo.ip ?? "unknown";
+  const headers = new Headers(req.headers);
+  const ipInfo = resolveFromHeaders(headers);
+  const ipKey = clientIp(headers);
 
   const rl = await rateLimit(`forms:submit:${ipKey}`, 10, env.RATE_LIMIT_WRITES_PER_MIN);
   if (!rl.ok) return errors.tooMany();

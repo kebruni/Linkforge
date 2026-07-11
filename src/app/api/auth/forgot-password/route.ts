@@ -3,10 +3,10 @@ import { z } from "zod";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveFromHeaders } from "@/lib/geo";
 import { issueToken } from "@/lib/tokens";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const ip = resolveFromHeaders(new Headers(req.headers)).ip ?? "unknown";
+  const ip = clientIp(new Headers(req.headers));
   const rl = await rateLimit(`auth:forgot:${ip}`, 5, 15);
   if (!rl.ok) return errors.tooMany();
 

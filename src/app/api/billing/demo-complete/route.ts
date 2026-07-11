@@ -1,5 +1,6 @@
 /**
  * Completes a demo (no-Stripe) one-time payment: records purchase + lead.
+ * Tokens are single-use (Redis NX).
  */
 import { z } from "zod";
 import { AnalyticsEventType } from "@prisma/client";
@@ -7,10 +8,10 @@ import { AnalyticsEventType } from "@prisma/client";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveFromHeaders } from "@/lib/geo";
 import { isDemoBillingEnabled } from "@/lib/stripe";
-import { verifyDemoToken } from "@/lib/billing-demo";
+import { consumeDemoToken, verifyDemoToken } from "@/lib/billing-demo";
 import { logger } from "@/lib/logger";
+import { clientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,8 @@ export async function POST(req: Request) {
     return errors.badRequest("Demo billing is disabled");
   }
 
-  const ip = resolveFromHeaders(new Headers(req.headers)).ip ?? "unknown";
-  const rl = await rateLimit(`billing:demo:${ip}`, 30, 10);
+  const ip = clientIp(new Headers(req.headers));
+  const rl = await rateLimit(`billing:demo:${ip}`, 20, 10);
   if (!rl.ok) return errors.tooMany();
 
   const json = await req.json().catch(() => null);
@@ -34,6 +35,11 @@ export async function POST(req: Request) {
   const data = verifyDemoToken(parsed.data.token);
   if (!data) return errors.badRequest("Invalid or expired payment session");
 
+  const consumed = await consumeDemoToken(parsed.data.token, data);
+  if (!consumed) {
+    return errors.badRequest("This demo payment was already completed");
+  }
+
   const page = await prisma.page.findFirst({
     where: { id: data.pageId, deletedAt: null },
     select: { id: true, slug: true, userId: true, title: true },
@@ -42,7 +48,6 @@ export async function POST(req: Request) {
 
   const amountDisplay = (data.amountMinor / 100).toFixed(2);
 
-  // Inbox for page owner
   await prisma.formSubmission.create({
     data: {
       pageId: page.id,
@@ -65,7 +70,6 @@ export async function POST(req: Request) {
     },
   });
 
-  // Analytics event
   await prisma.analyticsEvent.create({
     data: {
       pageId: page.id,

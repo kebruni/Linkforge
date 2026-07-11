@@ -117,6 +117,14 @@ export async function POST(req: Request) {
             meta: { plan: session.metadata?.plan },
           });
         }
+        // Redeem first-party coupon only after successful payment
+        const couponId = session.metadata?.couponId;
+        if (couponId) {
+          await prisma.coupon.updateMany({
+            where: { id: couponId },
+            data: { redemptions: { increment: 1 } },
+          });
+        }
         break;
       }
       case "customer.subscription.updated":

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import argon2 from "argon2";
 
 import { auth } from "@/auth";
 import { errors, ok } from "@/lib/api";
@@ -15,6 +16,8 @@ const patchSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   isPublished: z.boolean().optional(),
   isPrivate: z.boolean().optional(),
+  /** Set when enabling private mode or rotating the page password */
+  pagePassword: z.string().min(4).max(128).optional().nullable(),
 });
 
 interface Ctx {
@@ -24,7 +27,7 @@ interface Ctx {
 async function findOwn(id: string, userId: string) {
   return prisma.page.findFirst({
     where: { id, userId, deletedAt: null },
-    select: { id: true, isPublished: true, slug: true },
+    select: { id: true, isPublished: true, isPrivate: true, passwordHash: true, slug: true },
   });
 }
 
@@ -44,6 +47,26 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const wasPublished = own.isPublished;
   const willPublish = parsed.data.isPublished;
+  const willPrivate = parsed.data.isPrivate;
+
+  let passwordHash: string | null | undefined = undefined;
+  if (parsed.data.pagePassword === null) {
+    passwordHash = null;
+  } else if (typeof parsed.data.pagePassword === "string") {
+    passwordHash = await argon2.hash(parsed.data.pagePassword, { type: argon2.argon2id });
+  }
+
+  // Enabling private requires a password (new or existing)
+  if (willPrivate === true) {
+    const hasPw = passwordHash !== undefined ? !!passwordHash : !!own.passwordHash;
+    if (!hasPw) {
+      return errors.badRequest("Set pagePassword when enabling private mode");
+    }
+  }
+  if (willPrivate === false) {
+    // Clearing private also clears password
+    passwordHash = null;
+  }
 
   const page = await prisma.page.update({
     where: { id },
@@ -52,6 +75,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       description: parsed.data.description ?? undefined,
       isPublished: parsed.data.isPublished,
       isPrivate: parsed.data.isPrivate,
+      ...(passwordHash !== undefined ? { passwordHash } : {}),
       version: { increment: 1 },
       publishedAt:
         willPublish === true && !wasPublished

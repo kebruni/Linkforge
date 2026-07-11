@@ -6,6 +6,7 @@ import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
+import { assertSafePublicUrl, sanitizeBlockContentUrls } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
@@ -62,7 +63,18 @@ export async function POST(req: Request, { params }: Ctx) {
     select: { order: true },
   });
   const order = (last?.order ?? -1) + 1;
-  const content = { ...DEFAULT_CONTENT[parsed.data.type], ...(parsed.data.content ?? {}) };
+  const merged = { ...DEFAULT_CONTENT[parsed.data.type], ...(parsed.data.content ?? {}) };
+  const sanitized = sanitizeBlockContentUrls(merged);
+  if (!sanitized.ok) return errors.badRequest(sanitized.reason);
+  const content = sanitized.content;
+
+  let url: string | null = typeof content.url === "string" ? content.url : null;
+  if (url) {
+    const safe = assertSafePublicUrl(url, { allowMailto: true });
+    if (!safe.ok) return errors.badRequest(safe.reason);
+    url = safe.url;
+    content.url = safe.url;
+  }
 
   const block = await prisma.block.create({
     data: {
@@ -71,7 +83,7 @@ export async function POST(req: Request, { params }: Ctx) {
       order,
       content: content as Prisma.InputJsonValue,
       label: typeof content.label === "string" ? content.label : null,
-      url: typeof content.url === "string" ? content.url : null,
+      url,
     },
     select: {
       id: true,

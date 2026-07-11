@@ -1,0 +1,84 @@
+{
+  "base": "http://127.0.0.1:3000",
+  "at": "2026-07-11T01:09:11.414Z",
+  "passed": 23,
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Rate-limit bypass via X-Forwarded-For spoofing",
+      "detail": "Created 8/8 accounts by rotating XFF — trust proxy config needed",
+      "evidence": {
+        "statuses": [
+          201,
+          201,
+          201,
+          201,
+          201,
+          201,
+          201,
+          201
+        ]
+      }
+    },
+    {
+      "severity": "high",
+      "title": "Webhook URLs not restricted (SSRF risk)",
+      "detail": "PRO users can set webhook URL to http://169.254.169.254, http://localhost, file internals — worker fetch has no blocklist",
+      "evidence": {}
+    },
+    {
+      "severity": "medium",
+      "title": "Login rate-limit is per-email in authorize(), not hard lockout with backoff UI",
+      "detail": "10 attempts / 30 capacity — credential stuffing still feasible across IPs; no CAPTCHA after N fails",
+      "evidence": {}
+    },
+    {
+      "severity": "medium",
+      "title": "Coupon redemptions++ happens before successful Stripe checkout",
+      "detail": "In checkout route, coupon.redemptions increments immediately — abandoned checkouts burn coupon quota (business logic bug)",
+      "evidence": {}
+    },
+    {
+      "severity": "medium",
+      "title": "Host header used for Stripe success/cancel URLs (open redirect / phishing)",
+      "detail": "checkout-one-time publicOrigin() trusts X-Forwarded-Host — attacker can point Stripe return to evil.com if they control a published pageId",
+      "evidence": {}
+    },
+    {
+      "severity": "low",
+      "title": "Health may leak stack details",
+      "detail": "{\"ok\":true,\"db\":true,\"redis\":true,\"uptime\":188.281593407,\"version\":\"1.1.0\"}",
+      "evidence": {}
+    },
+    {
+      "severity": "low",
+      "title": "Odd email accepted",
+      "detail": "status=429",
+      "evidence": {}
+    },
+    {
+      "severity": "low",
+      "title": "Internal resolve-host is publicly callable",
+      "detail": "status=404 — enables domain enumeration / cache probing",
+      "evidence": {}
+    },
+    {
+      "severity": "info",
+      "title": "Could not register Alice",
+      "detail": "{\"ok\":false,\"code\":\"RATE_LIMITED\",\"message\":\"Too many requests\",\"status\":429}",
+      "evidence": {}
+    },
+    {
+      "severity": "info",
+      "title": "Could not register Bob",
+      "detail": "{\"ok\":false,\"code\":\"RATE_LIMITED\",\"message\":\"Too many requests\",\"status\":429}",
+      "evidence": {}
+    },
+    {
+      "severity": "info",
+      "title": "No page id for Alice — skip IDOR/form tests",
+      "detail": "{\"ok\":false,\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required\",\"status\":401}",
+      "evidence": {}
+    }
+  ]
+}

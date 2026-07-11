@@ -8,13 +8,14 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { webhookLimitFor } from "@/lib/plan";
 import { env } from "@/lib/env";
+import { assertSafeWebhookUrl } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
 const ALL_EVENTS = Object.values(WebhookEventType);
 
 const createSchema = z.object({
-  url: z.string().url().max(500),
+  url: z.string().min(1).max(500),
   events: z.array(z.nativeEnum(WebhookEventType)).min(1).max(10),
 });
 
@@ -62,6 +63,9 @@ export async function POST(req: Request) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
 
+  const safeUrl = assertSafeWebhookUrl(parsed.data.url);
+  if (!safeUrl.ok) return errors.badRequest(safeUrl.reason);
+
   const count = await prisma.webhook.count({ where: { userId: session.user.id } });
   if (count >= limit) {
     return errors.forbidden(`Webhook limit reached (${limit}).`);
@@ -71,7 +75,7 @@ export async function POST(req: Request) {
   const row = await prisma.webhook.create({
     data: {
       userId: session.user.id,
-      url: parsed.data.url,
+      url: safeUrl.url,
       secret,
       events: parsed.data.events,
     },

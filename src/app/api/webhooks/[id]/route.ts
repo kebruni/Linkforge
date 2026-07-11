@@ -4,6 +4,7 @@ import { WebhookEventType } from "@prisma/client";
 import { auth } from "@/auth";
 import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { assertSafeWebhookUrl } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ interface Ctx {
 }
 
 const patchSchema = z.object({
-  url: z.string().url().max(500).optional(),
+  url: z.string().min(1).max(500).optional(),
   events: z.array(z.nativeEnum(WebhookEventType)).min(1).max(10).optional(),
   active: z.boolean().optional(),
 });
@@ -32,10 +33,17 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
 
+  let nextUrl = parsed.data.url;
+  if (nextUrl) {
+    const safe = assertSafeWebhookUrl(nextUrl);
+    if (!safe.ok) return errors.badRequest(safe.reason);
+    nextUrl = safe.url;
+  }
+
   const row = await prisma.webhook.update({
     where: { id },
     data: {
-      url: parsed.data.url,
+      url: nextUrl,
       events: parsed.data.events,
       active: parsed.data.active,
       // reset failures when re-enabled

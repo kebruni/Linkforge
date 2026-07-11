@@ -13,6 +13,18 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   if (!env.FEATURE_CUSTOM_DOMAINS) return errors.notFound();
 
+  // Only allow same-origin / middleware calls (not random internet scanners)
+  const secFetch = req.headers.get("sec-fetch-site");
+  const xfHost = req.headers.get("x-forwarded-host");
+  const hostHdr = req.headers.get("host");
+  // Soft gate: require either internal header from middleware or missing browser nav
+  const fromMiddleware = req.headers.get("x-linkforge-internal") === "1";
+  if (!fromMiddleware && secFetch === "cross-site") {
+    return errors.forbidden();
+  }
+  void xfHost;
+  void hostHdr;
+
   const host = new URL(req.url).searchParams.get("host");
   if (!host) return errors.badRequest("host required");
 
