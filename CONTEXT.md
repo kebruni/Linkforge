@@ -5,7 +5,7 @@
 > this top-to-bottom before doing anything. Then read `ARCHITECTURE.md` (system
 > design) and `DEPLOYMENT.md` (VPS guide).
 
-Last updated: **2026-07-10** (v1.1 production product).
+Last updated: **2026-07-10** (v1.1.1 security + e2e smoke).
 
 ---
 
@@ -14,119 +14,87 @@ Last updated: **2026-07-10** (v1.1 production product).
 - Goal: **production link-in-bio / mini-landing SaaS** branded **Linkforge**,
   target deploy `https://linkforge.kebruni.me`
   (VPS `164.92.240.90`, SSH `:2222`, deploy user `nurbek`).
-- Status: **v1.1 production product** — freemium limits, device sessions, API
-  keys, webhooks, custom domains (DNS TXT verify + host rewrite), content
-  reports + admin moderation, coupons, UTM/geo/device analytics, referral
-  tracking, optional Turnstile captcha, Stripe billing + demo fallback.
-- **Live VPS cutover** still needs SSH key + first `setup-vps` / `ssl-init` /
-  `deploy` if not already done on the server.
+- Status: **v1.1.1 on `main`** — full product surface + security hardening pass
+  (URL allowlists, private pages, rate-limit anti-spoof, demo single-use,
+  freemium race lock, webhook SSRF blocks) + API e2e smoke script.
+- **Live VPS cutover** still needs SSH key for `nurbek@164.92.240.90:2222`.
 
 ---
 
-## 1. Original requirements (summary)
+## 1. Shipped product surface
 
-Full 20-section ask (auth, builder, analytics, AI, monetization, admin, deploy,
-etc.) — see git history / ARCHITECTURE.md. Delivery is phased: solid product
-core + monetization + developer tools rather than every marketplace/bot idea.
+Auth (OAuth, reset, verify, TOTP 2FA, device sessions), freemium limits, page
+builder, public `/u/[slug]`, analytics (UTM/geo/device), AI studio, Stripe
+billing + coupons, short links, API keys, webhooks, custom domains (DNS TXT),
+admin (users/reports/coupons/flags), QR, form leads, deploy stack.
 
----
+### Security pass (v1.1.1)
 
-## 2. Decisions
-
-| Decision | Why |
+| Area | Hardening |
 | --- | --- |
-| Freemium: free 3 pages / 10 short links | Real SaaS gating; PRO unlimited |
-| API keys + webhooks = PRO | Monetisation + abuse control |
-| Custom domains = PRO + `FEATURE_CUSTOM_DOMAINS` | DNS verify + middleware rewrite |
-| Billing demo only when `FEATURE_BILLING_DEMO` | Dev without Stripe keys |
-| System user `reports@linkforge.system` | Anonymous public content reports |
-| AuthSession table + JWT | Device list without full server sessions |
+| Links / shorts | http(s) only; block `javascript:`, private IPs, metadata |
+| Webhooks | SSRF allowlist + worker re-check |
+| Private pages | password + signed unlock cookie |
+| Demo billing | single-use Redis nonce |
+| Rate limits | `TRUST_PROXY` + `clientIp()` (ignore spoofed XFF when false) |
+| Freemium | `SELECT … FOR UPDATE` on User during page create |
+| Coupons | redeem only on Stripe `checkout.session.completed` |
+| Checkout return | always `APP_URL` (no Host header trust) |
+| Login | per-email + per-IP rate limits |
+| Health | production returns `{ ok }` only |
+
+### Commands
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+pnpm e2e:smoke              # app must be running on :3000
+pnpm security:audit         # optional stress harness
+```
 
 ---
 
-## 3. Status
+## 2. Plan limits (`src/lib/plan.ts`)
 
-### Shipped (v1.1)
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Auth | ✅ | credentials, OAuth, reset, verify, TOTP 2FA, device sessions, login audit |
-| Dashboard | ✅ | overview, pages, analytics, leads, shorts, AI, settings |
-| Page builder | ✅ | dnd blocks, theme, live preview, QR, custom domain panel |
-| Analytics | ✅ | daily rollups, chart, countries/devices/UTM/referrers |
-| AI | ✅ | studio + offline fallbacks + OpenAI when keyed |
-| Monetization | ✅ | Stripe sub + one-time + coupons + demo checkout |
-| Admin | ✅ | users, reports queue, coupons, feature flags |
-| Developer | ✅ | API keys, outbound webhooks (HMAC via worker) |
-| Custom domains | ✅ | TXT verify, Redis-cached host resolve, middleware rewrite |
-| Security | ✅ | rate limits, 2FA, audit log, optional Turnstile, report page |
-| Deploy stack | ✅ | Docker, nginx, scripts, CI — first live deploy may still be pending |
-
-### Still later (nice-to-have)
-
-- Playwright e2e suite
-- Full ACME cert issuance per custom domain (today: DNS verify + reverse-proxy config)
-- Telegram OAuth / bot
-- Themes marketplace, A/B testing
-- Prometheus/Grafana stack
-- PayPal
-
----
-
-## 4. Plan limits (`src/lib/plan.ts`)
-
-| Resource | Free (USER) | PRO / ADMIN |
+| Resource | Free | PRO |
 | --- | --- | --- |
 | Pages | 3 | unlimited |
 | Short links | 10 | unlimited |
 | API keys | 0 | 10 |
 | Webhooks | 0 | 20 |
-| Custom domains | no | yes (flag on) |
+| Custom domains | no | yes + flag |
 
 ---
 
-## 5. Infra
+## 3. Roadmap next
 
-### VPS
-- IP: `164.92.240.90`
-- SSH: port `2222`, user `nurbek`
-- Path: `/srv/linkforge`
-- Scripts: `setup-vps.sh`, `ssl-init.sh`, `deploy.sh`
-
-### Domains
-- Primary: `linkforge.kebruni.me`
-
-### Local
-```bash
-docker compose -f docker-compose.dev.yml up -d
-pnpm install
-cp .env.example .env   # AUTH_SECRET + DATABASE_URL :5433
-pnpm prisma migrate dev
-pnpm prisma db seed
-pnpm dev               # + pnpm worker
-```
-Gates: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
-
-Seed admin: `admin@linkforge.local` / `password123` (**dev only**).
+1. **First VPS deploy** — SSH key → `setup-vps` → `ssl-init` → `deploy`
+   - prod: `TRUST_PROXY=true`, `FEATURE_BILLING_DEMO=false`, real Stripe
+2. **Playwright UI e2e** (browser) on top of `e2e:smoke`
+3. **ACME certs** for custom domains (beyond DNS verify)
+4. Captcha (Turnstile) on login after N failures
+5. Themes marketplace / A/B / Telegram bot (later)
 
 ---
 
-## 6. Key routes added in v1.1
+## 4. Infra
 
-- `GET/DELETE /api/sessions`, `DELETE /api/sessions/[id]`
-- `GET/POST /api/api-keys`, `DELETE /api/api-keys/[id]`
-- `GET/POST /api/webhooks`, `PATCH/DELETE /api/webhooks/[id]`
-- `GET/POST/PUT/DELETE /api/pages/[id]/domain`
-- `POST /api/reports`
-- `GET/PATCH /api/admin/reports`
-- `GET/POST /api/admin/coupons`
-- `GET /api/internal/resolve-host`
+- VPS: `164.92.240.90:2222` user `nurbek` → `/srv/linkforge`
+- Domain: `linkforge.kebruni.me`
+- Local: Postgres host `:5433`, `pnpm dev` + `pnpm worker`
+- Seed: `admin@linkforge.local` / `password123` (**dev only**)
+
+GitHub: `https://github.com/kebruni/Linkforge` default branch **`main`**.
 
 ---
 
-## 7. Open / blocked
+## 5. Key modules
 
-- First VPS deploy from this machine if SSH key not provisioned.
-- GitHub Actions secrets: `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`.
-- Production: set `FEATURE_BILLING_DEMO=false` + real Stripe keys.
-- Optional: Turnstile keys for form captcha.
+| Module | Path |
+| --- | --- |
+| URL / SSRF safety | `src/lib/url-safety.ts` |
+| Client IP | `src/lib/client-ip.ts` |
+| Page unlock | `src/lib/page-unlock.ts` |
+| Plan gates | `src/lib/plan.ts` |
+| Demo pay tokens | `src/lib/billing-demo.ts` |
+| E2E smoke | `scripts/e2e-smoke.mjs` |
+| Security harness | `scripts/stress-security-audit.mjs` |

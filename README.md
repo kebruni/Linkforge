@@ -4,12 +4,18 @@ Production-grade open SaaS platform for link-in-bio / mini-landing pages, in
 the spirit of Linktree, Taplink, Beacons and Bento.me — built on Next.js 15,
 Prisma, PostgreSQL, Redis and BullMQ.
 
-> **Status:** v1.1 production product. Auth (OAuth, password reset, email verify,
+> **Status:** v1.1.1 production product. Auth (OAuth, password reset, email verify,
 > TOTP 2FA, device sessions), freemium plan limits, page builder, public renderer,
 > analytics (UTM / geo / devices), AI co-pilot, Stripe billing (PRO + coupons +
 > donations/products), short links, API keys, webhooks, custom domains, admin
-> moderation + coupons, QR, form leads, theme editor, and full deploy stack.
-> See [`ARCHITECTURE.md`](./ARCHITECTURE.md) and [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+> moderation + coupons, QR, form leads, theme editor, security hardening, and
+> full deploy stack. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
+> [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+
+```bash
+pnpm e2e:smoke          # API smoke against running app
+pnpm security:audit     # optional stress/security harness
+```
 
 ## Quick links
 

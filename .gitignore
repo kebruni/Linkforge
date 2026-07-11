@@ -12,6 +12,11 @@ coverage
 *.tsbuildinfo
 next-env.d.ts
 
+# local security / e2e reports
+stress-security-report*.json
+playwright-report/
+test-results/
+
 # logs
 *.log
 npm-debug.log*

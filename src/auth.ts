@@ -7,6 +7,7 @@ import argon2 from "argon2";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { clientIp } from "@/lib/client-ip";
 import { authConfig } from "@/auth.config";
 
 const credsSchema = z.object({
@@ -24,16 +25,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(input) {
+      async authorize(input, request) {
         const parsed = credsSchema.safeParse(input);
         if (!parsed.success) return null;
         const { email, password } = parsed.data;
 
-        // Per-email rate-limit (IP-based limit is enforced separately in the
-        // route handler — Auth.js doesn't expose the request here).
-        const rl = await rateLimit(`auth:login:${email.toLowerCase()}`, 10, 30);
-        if (!rl.ok) {
-          logger.warn({ email }, "auth.login.rate_limited");
+        // Per-email + per-IP to slow credential stuffing
+        const headers =
+          request && typeof request === "object" && "headers" in request
+            ? new Headers((request as Request).headers)
+            : new Headers();
+        const ip = clientIp(headers);
+        const [rlEmail, rlIp] = await Promise.all([
+          rateLimit(`auth:login:${email.toLowerCase()}`, 8, 20),
+          rateLimit(`auth:login:ip:${ip}`, 20, 40),
+        ]);
+        if (!rlEmail.ok || !rlIp.ok) {
+          logger.warn({ email, ip }, "auth.login.rate_limited");
           return null;
         }
 
