@@ -7,6 +7,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import { resolveFromHeaders } from "@/lib/geo";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { verifyTurnstile, isTurnstileEnabled } from "@/lib/turnstile";
+import { dispatchUserWebhooks } from "@/lib/webhooks";
 
 export const runtime = "nodejs";
 
@@ -14,6 +16,7 @@ const bodySchema = z.object({
   pageId: z.string().min(1),
   blockId: z.string().min(1).optional(),
   payload: z.record(z.unknown()),
+  turnstileToken: z.string().max(2048).optional(),
 });
 
 export async function POST(req: Request) {
@@ -27,6 +30,11 @@ export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
+  }
+
+  if (isTurnstileEnabled()) {
+    const captchaOk = await verifyTurnstile(parsed.data.turnstileToken, ipInfo.ip);
+    if (!captchaOk) return errors.badRequest("Captcha verification failed");
   }
 
   const { pageId, blockId, payload } = parsed.data;
@@ -95,6 +103,13 @@ export async function POST(req: Request) {
   } catch (err) {
     logger.warn({ err, pageId }, "forms.submit.analytics_failed");
   }
+
+  void dispatchUserWebhooks(page.userId, "FORM_SUBMITTED", {
+    pageId: page.id,
+    blockId: blockId ?? null,
+    submissionId: submission.id,
+    payload: clean,
+  });
 
   return ok({ id: submission.id }, { status: 201 });
 }

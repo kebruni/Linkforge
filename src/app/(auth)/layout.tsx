@@ -2,15 +2,15 @@ import Link from "next/link";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="flex flex-col px-6 py-10 md:px-10">
+    <div className="grid min-h-dvh lg:grid-cols-2">
+      <div className="safe-area-pad flex flex-col px-4 py-6 sm:px-6 sm:py-10 md:px-10">
         <Link href="/" className="flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-foreground">
             <span className="font-bold">L</span>
           </span>
           <span className="text-lg font-semibold tracking-tight">Linkforge</span>
         </Link>
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 items-center justify-center py-8 sm:py-0">
           <div className="w-full max-w-sm">{children}</div>
         </div>
       </div>

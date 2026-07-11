@@ -66,7 +66,17 @@ const schema = z.object({
 
   FEATURE_AI: stringFlag,
   FEATURE_BILLING: stringFlag,
+  /**
+   * When true (default in development if unset), one-time donations/products
+   * work without Stripe keys via an in-app demo checkout.
+   * In production set FEATURE_BILLING_DEMO=false and configure Stripe.
+   */
+  FEATURE_BILLING_DEMO: stringFlag,
   FEATURE_CUSTOM_DOMAINS: stringFlag,
+
+  /** Cloudflare Turnstile (optional captcha on public forms) */
+  TURNSTILE_SECRET_KEY: z.string().optional().default(""),
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

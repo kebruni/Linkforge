@@ -31,6 +31,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toaster";
 import { BLOCK_PALETTE, type BlockKind } from "@/features/builder/blocks";
 import { LivePreview } from "@/features/builder/live-preview";
+import { DomainPanel } from "@/features/builder/domain-panel";
 
 type EditorBlock = {
   id: string;
@@ -214,25 +215,25 @@ export function PageBuilder({ page }: { page: EditorPage }) {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+    <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
             <Input
-              className="border-0 px-0 text-2xl font-semibold focus-visible:ring-0"
+              className="border-0 px-0 text-xl font-semibold focus-visible:ring-0 sm:text-2xl"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">/u/{page.slug}</p>
+            <p className="truncate text-xs text-muted-foreground">/u/{page.slug}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 rounded-md border px-2.5 py-1.5">
               <Switch checked={isPublished} onCheckedChange={setIsPublished} id="publish" />
               <Label htmlFor="publish" className="text-sm">
                 Publish
               </Label>
             </div>
-            <Button onClick={savePage} variant="accent" disabled={pending}>
+            <Button onClick={savePage} variant="accent" disabled={pending} className="flex-1 sm:flex-none">
               {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
               Save
             </Button>
@@ -336,6 +337,15 @@ export function PageBuilder({ page }: { page: EditorPage }) {
 
         <Card>
           <CardHeader>
+            <CardTitle>Custom domain</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DomainPanel pageId={page.id} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <QrCode className="size-4" />
               QR code
@@ -365,11 +375,15 @@ export function PageBuilder({ page }: { page: EditorPage }) {
         </Card>
       </div>
 
-      <div className="lg:sticky lg:top-6">
+      <div className="order-first xl:order-none xl:sticky xl:top-20">
         <Tabs defaultValue="mobile" className="space-y-3">
-          <TabsList>
-            <TabsTrigger value="mobile">Mobile</TabsTrigger>
-            <TabsTrigger value="desktop">Desktop</TabsTrigger>
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="mobile" className="flex-1 sm:flex-none">
+              Mobile
+            </TabsTrigger>
+            <TabsTrigger value="desktop" className="flex-1 sm:flex-none">
+              Desktop
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="mobile">
             <LivePreview page={previewPage} width={380} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,29 +15,77 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
+import { slugify } from "@/lib/utils";
 
 export function CreatePageDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [pending, setPending] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setTitle("");
+      setSlug("");
+      setSlugTouched(false);
+      setFieldError(null);
+      setPending(false);
+    }
+  }, [open]);
+
+  function onTitleChange(value: string) {
+    setTitle(value);
+    setFieldError(null);
+    if (!slugTouched) {
+      setSlug(slugify(value));
+    }
+  }
+
+  function onSlugChange(value: string) {
+    setSlugTouched(true);
+    setFieldError(null);
+    // Live-normalize so users never fight the pattern
+    setSlug(slugify(value));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setFieldError(null);
+
+    const cleanTitle = title.trim();
+    const cleanSlug = slugify(slug || title);
+
+    if (!cleanTitle) {
+      setFieldError("Enter a title for your page.");
+      return;
+    }
+    if (cleanSlug.length < 3) {
+      setFieldError("Slug must be at least 3 characters (a–z, 0–9, hyphens).");
+      return;
+    }
+
     setPending(true);
     try {
       const res = await fetch("/api/pages", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, slug }),
+        body: JSON.stringify({ title: cleanTitle, slug: cleanSlug }),
       });
-      const json = await res.json();
-      if (!res.ok || json.ok === false) {
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.ok === false) {
+        const details = json?.details as Record<string, string[] | undefined> | undefined;
+        const fromZod =
+          details?.slug?.[0] ?? details?.title?.[0] ?? null;
+        const message = json?.message ?? fromZod ?? "Try a different slug.";
+        setFieldError(message);
         toast({
           variant: "destructive",
           title: "Couldn't create page",
-          description: json?.message ?? "Try a different slug.",
+          description: message,
         });
         return;
       }
@@ -64,16 +112,19 @@ export function CreatePageDialog() {
             Pick a title and a public URL slug. You can change both later.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="page-title">Title</Label>
             <Input
               id="page-title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => onTitleChange(e.target.value)}
               placeholder="My link page"
               required
+              maxLength={160}
+              autoComplete="off"
             />
+            <p className="text-xs text-muted-foreground">Any name is fine — including apostrophes.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="page-slug">Slug</Label>
@@ -85,14 +136,25 @@ export function CreatePageDialog() {
                 id="page-slug"
                 className="rounded-l-none"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value)}
+                onChange={(e) => onSlugChange(e.target.value)}
                 placeholder="my-page"
-                pattern="^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$"
                 required
+                minLength={3}
+                maxLength={32}
+                autoComplete="off"
+                spellCheck={false}
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Letters, numbers and hyphens only. Auto-filled from the title.
+            </p>
           </div>
-          <Button type="submit" className="w-full" variant="accent" disabled={pending}>
+          {fieldError ? (
+            <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {fieldError}
+            </p>
+          ) : null}
+          <Button type="submit" className="w-full" variant="accent" disabled={pending || !title.trim()}>
             {pending && <Loader2 className="mr-2 size-4 animate-spin" />}
             Create page
           </Button>

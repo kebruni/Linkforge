@@ -133,31 +133,31 @@ export default function LandingPage() {
     <>
       <section className="relative overflow-hidden border-b">
         <div className="grid-bg pointer-events-none absolute inset-0 opacity-60" />
-        <div className="container relative py-24 md:py-32">
+        <div className="container relative py-14 sm:py-20 md:py-32">
           <div className="mx-auto max-w-3xl text-center">
-            <Badge variant="accent" className="mb-6">
+            <Badge variant="accent" className="mb-4 sm:mb-6">
               <Sparkles className="mr-1 size-3" />
               Built for creators in 2026
             </Badge>
-            <h1 className="text-balance text-5xl font-semibold tracking-tight md:text-7xl">
+            <h1 className="text-balance text-[2.15rem] font-semibold leading-[1.1] tracking-tight sm:text-5xl md:text-7xl">
               One link.
               <span className="bg-gradient-to-r from-accent to-fuchsia-500 bg-clip-text text-transparent">
                 {" "}
                 Your whole world.
               </span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground md:text-xl">
+            <p className="mx-auto mt-4 max-w-2xl text-balance text-base text-muted-foreground sm:mt-6 sm:text-lg md:text-xl">
               The production-grade Linktree / Taplink alternative. Beautiful pages,
               first-class analytics, AI optimisation and Stripe payments — on a
               stack you can actually self-host.
             </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild size="lg" variant="accent" className="px-6">
+            <div className="mt-8 flex w-full flex-col items-stretch justify-center gap-3 sm:mt-10 sm:w-auto sm:flex-row sm:items-center">
+              <Button asChild size="lg" variant="accent" className="w-full px-6 sm:w-auto">
                 <Link href="/register">
                   Create your page <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
                 <Link href="#features">See what&apos;s inside</Link>
               </Button>
             </div>
@@ -168,9 +168,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="container py-24">
+      <section id="features" className="container py-14 sm:py-20 md:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
             Everything a serious creator needs
           </h2>
           <p className="mt-3 text-muted-foreground">
@@ -195,14 +195,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-y bg-muted/30 py-24">
+      <section className="border-y bg-muted/30 py-14 sm:py-20 md:py-24">
         <div className="container">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
               Loved by creators who outgrew Linktree
             </h2>
           </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:mt-12 sm:gap-6 md:grid-cols-3">
             {TESTIMONIALS.map((t) => (
               <Card key={t.name}>
                 <CardContent className="space-y-4 p-6">
@@ -218,15 +218,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="pricing" className="container py-24">
+      <section id="pricing" className="container py-14 sm:py-20 md:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">Simple pricing</h2>
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">Simple pricing</h2>
           <p className="mt-3 text-muted-foreground">
             Start free. Upgrade when you need analytics retention, AI, custom
             domains or product sales.
           </p>
         </div>
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:mt-12 sm:gap-6 md:grid-cols-3">
           {PRICING.map((p) => (
             <Card
               key={p.name}
@@ -260,12 +260,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="faq" className="border-t py-24">
+      <section id="faq" className="border-t py-14 sm:py-20 md:py-24">
         <div className="container max-w-3xl">
-          <h2 className="text-center text-3xl font-semibold tracking-tight md:text-4xl">
+          <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
             Frequently asked questions
           </h2>
-          <div className="mt-12 space-y-3">
+          <div className="mt-8 space-y-3 sm:mt-12">
             {FAQS.map((f) => (
               <Card key={f.q}>
                 <CardHeader>
@@ -280,15 +280,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-t bg-gradient-to-br from-accent/15 via-fuchsia-500/10 to-cyan-500/10 py-24">
+      <section className="border-t bg-gradient-to-br from-accent/15 via-fuchsia-500/10 to-cyan-500/10 py-14 sm:py-20 md:py-24">
         <div className="container max-w-3xl text-center">
-          <h2 className="text-balance text-4xl font-semibold tracking-tight">
+          <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
             Build a page that converts in under a minute.
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
             Linkforge is open, fast, and ready to scale with you.
           </p>
-          <Button asChild size="lg" variant="accent" className="mt-8 px-6">
+          <Button asChild size="lg" variant="accent" className="mt-6 w-full px-6 sm:mt-8 sm:w-auto">
             <Link href="/register">
               Get started — it&apos;s free <ArrowRight className="ml-1 size-4" />
             </Link>

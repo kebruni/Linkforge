@@ -6,6 +6,7 @@ import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
+import { shortLinkLimitFor } from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,16 @@ export async function POST(req: Request) {
 
   const rl = await rateLimit(`short:create:${session.user.id}`, 30, env.RATE_LIMIT_WRITES_PER_MIN);
   if (!rl.ok) return errors.tooMany();
+
+  const limit = shortLinkLimitFor(session.user.role);
+  if (Number.isFinite(limit)) {
+    const count = await prisma.shortLink.count({ where: { userId: session.user.id } });
+    if (count >= limit) {
+      return errors.forbidden(
+        `Free plan allows ${limit} short links. Upgrade to PRO for unlimited links.`,
+      );
+    }
+  }
 
   const json = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(json);

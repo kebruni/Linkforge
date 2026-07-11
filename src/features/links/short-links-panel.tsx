@@ -71,7 +71,10 @@ export function ShortLinksPanel() {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={onCreate} className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_160px_auto]">
+      <form
+        onSubmit={onCreate}
+        className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_160px_auto] sm:p-4"
+      >
         <div className="space-y-2">
           <Label htmlFor="url">Destination URL</Label>
           <Input
@@ -94,7 +97,7 @@ export function ShortLinksPanel() {
           />
         </div>
         <div className="flex items-end">
-          <Button type="submit" variant="accent" disabled={pending}>
+          <Button type="submit" variant="accent" disabled={pending} className="w-full sm:w-auto">
             {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Link2 className="mr-2 size-4" />}
             Shorten
           </Button>

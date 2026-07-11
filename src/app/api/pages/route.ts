@@ -6,12 +6,15 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { isValidSlug, slugify } from "@/lib/utils";
 import { env } from "@/lib/env";
+import { pageLimitFor } from "@/lib/plan";
+import { writeAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
 const bodySchema = z.object({
   title: z.string().min(1).max(160),
-  slug: z.string().min(3).max(32).refine(isValidSlug, "Invalid slug"),
+  // Accept free-form slug input — we normalise with slugify below
+  slug: z.string().min(1).max(64).optional(),
 });
 
 export async function GET() {
@@ -40,23 +43,48 @@ export async function POST(req: Request) {
   const rl = await rateLimit(`pages:create:${session.user.id}`, 10, env.RATE_LIMIT_WRITES_PER_MIN);
   if (!rl.ok) return errors.tooMany();
 
+  const limit = pageLimitFor(session.user.role);
+  if (Number.isFinite(limit)) {
+    const count = await prisma.page.count({
+      where: { userId: session.user.id, deletedAt: null },
+    });
+    if (count >= limit) {
+      return errors.forbidden(
+        `Free plan allows ${limit} pages. Upgrade to PRO for unlimited pages.`,
+      );
+    }
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
-  if (!parsed.success) return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
+  if (!parsed.success) {
+    return errors.badRequest("Invalid input", parsed.error.flatten().fieldErrors);
+  }
 
-  const slug = slugify(parsed.data.slug);
-  if (!isValidSlug(slug)) return errors.badRequest("Invalid slug after normalisation");
+  const title = parsed.data.title.trim();
+  if (!title) return errors.badRequest("Title is required");
+
+  // Prefer explicit slug; fall back to title so "My name's" → "my-names"
+  const slug = slugify(parsed.data.slug?.trim() || title);
+  if (slug.length < 3) {
+    return errors.badRequest("Slug must be at least 3 characters (use letters or numbers)");
+  }
+  if (!isValidSlug(slug)) {
+    return errors.badRequest(
+      "Slug can only use lowercase letters, numbers and hyphens (e.g. my-page)",
+    );
+  }
 
   const reserved = await prisma.reservedSlug.findUnique({ where: { slug } });
-  if (reserved) return errors.conflict("This slug is reserved");
+  if (reserved) return errors.conflict("This slug is reserved — pick another");
 
   const existing = await prisma.page.findUnique({ where: { slug }, select: { id: true } });
-  if (existing) return errors.conflict("Slug already taken");
+  if (existing) return errors.conflict("Slug already taken — pick another");
 
   const page = await prisma.page.create({
     data: {
       userId: session.user.id,
-      title: parsed.data.title,
+      title,
       slug,
       theme: {
         create: {
@@ -82,13 +110,20 @@ export async function POST(req: Request) {
             {
               type: "HEADER",
               order: 1,
-              content: { title: parsed.data.title, subtitle: `@${session.user.username}` },
+              content: { title, subtitle: `@${session.user.username}` },
             },
           ],
         },
       },
     },
     select: { id: true, slug: true, title: true },
+  });
+
+  await writeAudit({
+    action: "PAGE_CREATED",
+    userId: session.user.id,
+    targetId: page.id,
+    meta: { slug: page.slug },
   });
 
   return ok(page, { status: 201 });

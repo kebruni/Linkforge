@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Script from "next/script";
 import { unstable_cache } from "next/cache";
@@ -6,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { buildMetadata, jsonLdPerson } from "@/lib/seo";
 import { PageRenderer } from "@/components/public/page-renderer";
+import { PaidBanner } from "@/components/public/paid-banner";
+import { ReportPageButton } from "@/features/public/report-page-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -55,7 +58,13 @@ export default async function PublicPage({ params }: Params) {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <PaidBanner />
+      </Suspense>
       <PageRenderer page={page} />
+      <div className="flex justify-center py-6">
+        <ReportPageButton pageId={page.id} />
+      </div>
       <Script
         id="public-page-tracker"
         strategy="afterInteractive"
@@ -64,7 +73,17 @@ export default async function PublicPage({ params }: Params) {
 (function(){
   try {
     var pid=${JSON.stringify(page.id)};
+    var params=new URLSearchParams(location.search);
+    var utm={
+      source:params.get('utm_source')||undefined,
+      medium:params.get('utm_medium')||undefined,
+      campaign:params.get('utm_campaign')||undefined,
+      term:params.get('utm_term')||undefined,
+      content:params.get('utm_content')||undefined
+    };
+    var hasUtm=utm.source||utm.medium||utm.campaign||utm.term||utm.content;
     var send=function(body){
+      if(hasUtm) body.utm=utm;
       try {
         var blob=new Blob([JSON.stringify(body)],{type:'application/json'});
         navigator.sendBeacon('/api/analytics/track',blob);

@@ -1,14 +1,34 @@
 /**
  * Lazy Stripe client. Billing is optional — when STRIPE_SECRET_KEY is empty
- * all helpers return null / throw a typed error so the UI can degrade gracefully.
+ * we can still run demo checkout if FEATURE_BILLING_DEMO / development.
  */
 import Stripe from "stripe";
-import { env } from "./env";
+import { env, isDev } from "./env";
 
 let client: Stripe | null | undefined;
 
+/** Real Stripe secret key present */
+export function hasStripeKey(): boolean {
+  return Boolean(env.STRIPE_SECRET_KEY);
+}
+
+/**
+ * Demo checkout is allowed when billing is on and either:
+ * - FEATURE_BILLING_DEMO is explicitly true, or
+ * - we're in development without a Stripe key
+ */
+export function isDemoBillingEnabled(): boolean {
+  if (!env.FEATURE_BILLING) return false;
+  if (env.FEATURE_BILLING_DEMO) return true;
+  // Dev convenience: no Stripe key → demo payments still work
+  if (isDev && !hasStripeKey()) return true;
+  return false;
+}
+
+/** UI + API: payments available (Stripe and/or demo) */
 export function isBillingConfigured(): boolean {
-  return Boolean(env.STRIPE_SECRET_KEY && env.FEATURE_BILLING);
+  if (!env.FEATURE_BILLING) return false;
+  return hasStripeKey() || isDemoBillingEnabled();
 }
 
 export function getStripe(): Stripe | null {

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { RegisterForm } from "@/features/auth/register-form";
 
@@ -8,11 +9,11 @@ export default function RegisterPage() {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
-        <p className="text-sm text-muted-foreground">
-          Free forever. No credit card required.
-        </p>
+        <p className="text-sm text-muted-foreground">Free forever. No credit card required.</p>
       </div>
-      <RegisterForm />
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-lg bg-muted" />}>
+        <RegisterForm />
+      </Suspense>
       <p className="text-center text-sm text-muted-foreground">
         Already on Linkforge?{" "}
         <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">

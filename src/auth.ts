@@ -94,6 +94,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async signIn({ user, account }) {
       logger.info({ userId: user?.id, provider: account?.provider }, "auth.signIn");
+      if (user?.id) {
+        try {
+          const { createAuthSession } = await import("@/lib/sessions");
+          const { writeAudit } = await import("@/lib/audit");
+          await createAuthSession({ userId: user.id });
+          await writeAudit({
+            action: "USER_LOGIN",
+            userId: user.id,
+            meta: { provider: account?.provider ?? "credentials" },
+          });
+        } catch (err) {
+          logger.warn({ err, userId: user.id }, "auth.signIn.session_record_failed");
+        }
+      }
     },
     async signOut(message) {
       logger.info({ message }, "auth.signOut");

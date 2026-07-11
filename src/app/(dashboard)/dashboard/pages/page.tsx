@@ -20,12 +20,16 @@ export default async function PagesIndexPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Pages</h1>
-          <p className="mt-1 text-muted-foreground">Your mini-landings and link-in-bio pages.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Pages</h1>
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+            Your mini-landings and link-in-bio pages.
+          </p>
         </div>
-        <CreatePageDialog />
+        <div className="shrink-0 [&_button]:w-full sm:[&_button]:w-auto">
+          <CreatePageDialog />
+        </div>
       </div>
       {pages.length === 0 ? (
         <Card>
@@ -48,15 +52,15 @@ export default async function PagesIndexPage() {
                 </CardTitle>
                 <CardDescription>/u/{p.slug}</CardDescription>
               </CardHeader>
-              <CardContent className="flex justify-between text-xs text-muted-foreground">
+              <CardContent className="flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <span>Updated {p.updatedAt.toLocaleDateString()}</span>
-                <div className="flex gap-2">
-                  <Button asChild size="sm" variant="outline">
+                <div className="grid grid-cols-2 gap-2 sm:flex">
+                  <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
                     <Link href={`/u/${p.slug}`} target="_blank">
                       View
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="accent">
+                  <Button asChild size="sm" variant="accent" className="w-full sm:w-auto">
                     <Link href={`/dashboard/pages/${p.id}/edit`}>Edit</Link>
                   </Button>
                 </div>

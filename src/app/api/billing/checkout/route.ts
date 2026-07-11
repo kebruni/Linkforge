@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   plan: z.enum(["PRO_MONTHLY", "PRO_YEARLY"]).default("PRO_MONTHLY"),
+  couponCode: z.string().min(3).max(32).optional(),
 });
 
 export async function POST(req: Request) {
@@ -72,6 +73,36 @@ export async function POST(req: Request) {
     });
   }
 
+  // Optional first-party coupon (percent-off via Stripe coupons created on the fly)
+  let discounts: { coupon: string }[] | undefined;
+  let couponMeta: string | undefined;
+  if (parsed.data.couponCode) {
+    const code = parsed.data.couponCode.toUpperCase();
+    const coupon = await prisma.coupon.findUnique({ where: { code } });
+    if (!coupon) return errors.badRequest("Invalid coupon code");
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+      return errors.badRequest("Coupon expired");
+    }
+    if (coupon.maxRedemptions != null && coupon.redemptions >= coupon.maxRedemptions) {
+      return errors.badRequest("Coupon fully redeemed");
+    }
+    const stripeCoupon = await stripe.coupons.create({
+      duration: "once",
+      percent_off: coupon.percentOff ?? undefined,
+      amount_off: coupon.amountOffMinor ?? undefined,
+      currency: coupon.amountOffMinor ? coupon.currency.toLowerCase() : undefined,
+      name: coupon.code,
+      max_redemptions: 1,
+      metadata: { linkforgeCouponId: coupon.id, code: coupon.code },
+    });
+    discounts = [{ coupon: stripeCoupon.id }];
+    couponMeta = coupon.id;
+    await prisma.coupon.update({
+      where: { id: coupon.id },
+      data: { redemptions: { increment: 1 } },
+    });
+  }
+
   const checkout = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
@@ -79,11 +110,15 @@ export async function POST(req: Request) {
     success_url: appUrl("/dashboard/settings?billing=success"),
     cancel_url: appUrl("/dashboard/settings?billing=canceled"),
     client_reference_id: user.id,
-    metadata: { userId: user.id, plan: parsed.data.plan },
+    metadata: {
+      userId: user.id,
+      plan: parsed.data.plan,
+      ...(couponMeta ? { couponId: couponMeta } : {}),
+    },
     subscription_data: {
       metadata: { userId: user.id, plan: parsed.data.plan },
     },
-    allow_promotion_codes: true,
+    ...(discounts ? { discounts } : { allow_promotion_codes: true }),
   });
 
   return ok({ url: checkout.url });

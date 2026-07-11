@@ -38,29 +38,36 @@ export function DonationBlock({
   async function donate(amount: number) {
     if (isEditing || !pageId) return;
     setPending(amount);
-    const res = await fetch("/api/billing/checkout-one-time", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        pageId,
-        blockId,
-        kind: "donation",
-        amountMinor: amount,
-        currency,
-        title: `${title} · ${formatMoney(amount, currency)}`,
-      }),
-    });
-    const json = await res.json().catch(() => null);
-    setPending(null);
-    if (!res.ok || json?.ok === false) {
-      toast({
-        variant: "destructive",
-        title: "Checkout unavailable",
-        description: json?.message ?? "Payments are not configured yet.",
+    try {
+      const res = await fetch("/api/billing/checkout-one-time", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pageId,
+          blockId,
+          kind: "donation",
+          amountMinor: amount,
+          currency,
+          title: `${title} · ${formatMoney(amount, currency)}`,
+        }),
       });
-      return;
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.ok === false) {
+        toast({
+          variant: "destructive",
+          title: "Checkout unavailable",
+          description: json?.message ?? "Payments are not configured yet.",
+        });
+        return;
+      }
+      if (json?.data?.url) {
+        window.location.href = json.data.url;
+        return;
+      }
+      toast({ variant: "destructive", title: "No checkout URL returned" });
+    } finally {
+      setPending(null);
     }
-    if (json?.data?.url) window.location.href = json.data.url;
   }
 
   return (
@@ -81,7 +88,9 @@ export function DonationBlock({
           </Button>
         ))}
       </div>
-      <p className="text-[11px] opacity-50">Secure checkout powered by Stripe.</p>
+      <p className="text-[11px] opacity-50">
+        Secure checkout · Stripe when configured, demo mode in local dev.
+      </p>
     </div>
   );
 }

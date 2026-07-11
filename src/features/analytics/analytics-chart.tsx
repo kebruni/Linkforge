@@ -17,8 +17,22 @@ export function AnalyticsChart({ data }: { data: { day: string; views: number; c
           </linearGradient>
         </defs>
         <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: "hsl(var(--muted-foreground))" }} />
-        <YAxis tickLine={false} axisLine={false} fontSize={11} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+        <XAxis
+          dataKey="day"
+          tickLine={false}
+          axisLine={false}
+          fontSize={10}
+          tick={{ fill: "hsl(var(--muted-foreground))" }}
+          tickFormatter={(v: string) => (typeof v === "string" ? v.slice(5) : v)}
+          minTickGap={28}
+        />
+        <YAxis
+          width={32}
+          tickLine={false}
+          axisLine={false}
+          fontSize={10}
+          tick={{ fill: "hsl(var(--muted-foreground))" }}
+        />
         <Tooltip
           contentStyle={{
             background: "hsl(var(--card))",

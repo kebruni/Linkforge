@@ -39,6 +39,11 @@ describe("slugify", () => {
     expect(slugify(" Hello World! ")).toBe("hello-world");
     expect(slugify("Foo___Bar")).toBe("foo-bar");
   });
+  it("handles apostrophes and punctuation (page titles)", () => {
+    expect(slugify("My name's")).toBe("my-names");
+    expect(slugify("Café du Coin")).toBe("cafe-du-coin");
+    expect(slugify("Hello!!!")).toBe("hello");
+  });
   it("truncates to 32 chars", () => {
     expect(slugify("a".repeat(50)).length).toBeLessThanOrEqual(32);
   });

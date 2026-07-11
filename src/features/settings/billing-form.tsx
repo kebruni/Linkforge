@@ -20,6 +20,7 @@ export function BillingForm({
   } | null;
 }) {
   const [pending, setPending] = useState<"monthly" | "yearly" | "portal" | null>(null);
+  const [couponCode, setCouponCode] = useState("");
   const isPro = role === "PRO" || role === "ADMIN";
 
   async function checkout(plan: "PRO_MONTHLY" | "PRO_YEARLY") {
@@ -27,7 +28,10 @@ export function BillingForm({
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({
+        plan,
+        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+      }),
     });
     const json = await res.json().catch(() => null);
     setPending(null);
@@ -85,27 +89,41 @@ export function BillingForm({
       )}
 
       {billingEnabled && !isPro && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="accent"
-            size="sm"
-            disabled={!!pending}
-            onClick={() => checkout("PRO_MONTHLY")}
-          >
-            {pending === "monthly" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-            Upgrade monthly · $8
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!!pending}
-            onClick={() => checkout("PRO_YEARLY")}
-          >
-            {pending === "yearly" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-            Upgrade yearly · $72
-          </Button>
+        <div className="space-y-3">
+          <div className="max-w-xs space-y-1">
+            <label htmlFor="coupon" className="text-xs text-muted-foreground">
+              Coupon code (optional)
+            </label>
+            <input
+              id="coupon"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              placeholder="LAUNCH20"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="accent"
+              size="sm"
+              disabled={!!pending}
+              onClick={() => checkout("PRO_MONTHLY")}
+            >
+              {pending === "monthly" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Upgrade monthly · $8
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!!pending}
+              onClick={() => checkout("PRO_YEARLY")}
+            >
+              {pending === "yearly" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Upgrade yearly · $72
+            </Button>
+          </div>
         </div>
       )}
 

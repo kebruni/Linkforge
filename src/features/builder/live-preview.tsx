@@ -53,10 +53,10 @@ export function LivePreview({ page, width }: { page: LivePage; width: number }) 
   const visible = page.blocks.filter((b) => !b.hidden).sort((a, b) => a.order - b.order);
 
   return (
-    <div className="overflow-hidden rounded-2xl border shadow-sm">
+    <div className="mx-auto w-full max-w-full overflow-hidden rounded-2xl border shadow-sm">
       <div
-        className="flex min-h-[640px] flex-col gap-3 px-6 py-10"
-        style={{ ...cssVars, width: "100%", maxWidth: width }}
+        className="mx-auto flex min-h-[420px] w-full flex-col gap-3 px-4 py-8 sm:min-h-[640px] sm:px-6 sm:py-10"
+        style={{ ...cssVars, maxWidth: width }}
       >
         <div className="mx-auto flex w-full max-w-md flex-col gap-3">
           {visible.map((b) => {

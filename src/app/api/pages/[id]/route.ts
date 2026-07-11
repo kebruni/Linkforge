@@ -5,6 +5,8 @@ import { errors, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { env } from "@/lib/env";
+import { writeAudit } from "@/lib/audit";
+import { dispatchUserWebhooks } from "@/lib/webhooks";
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,7 @@ interface Ctx {
 async function findOwn(id: string, userId: string) {
   return prisma.page.findFirst({
     where: { id, userId, deletedAt: null },
-    select: { id: true, isPublished: true },
+    select: { id: true, isPublished: true, slug: true },
   });
 }
 
@@ -68,6 +70,21 @@ export async function PATCH(req: Request, { params }: Ctx) {
       updatedAt: true,
     },
   });
+
+  if (willPublish === true && !wasPublished) {
+    await writeAudit({
+      action: "PAGE_PUBLISHED",
+      userId: session.user.id,
+      targetId: page.id,
+      meta: { slug: page.slug },
+    });
+    void dispatchUserWebhooks(session.user.id, "PAGE_PUBLISHED", {
+      pageId: page.id,
+      slug: page.slug,
+      title: page.title,
+      url: `${env.APP_URL}/u/${page.slug}`,
+    });
+  }
 
   return ok(page);
 }
