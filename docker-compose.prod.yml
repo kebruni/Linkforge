@@ -34,7 +34,13 @@ x-app-env: &app-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
   FEATURE_AI: ${FEATURE_AI:-true}
   FEATURE_BILLING: ${FEATURE_BILLING:-false}
+  # Demo (fake) checkout must stay OFF in production.
+  FEATURE_BILLING_DEMO: ${FEATURE_BILLING_DEMO:-false}
   FEATURE_CUSTOM_DOMAINS: ${FEATURE_CUSTOM_DOMAINS:-false}
+  # Behind Nginx/Cloudflare: trust X-Forwarded-For for rate limits.
+  TRUST_PROXY: ${TRUST_PROXY:-false}
+  RATE_LIMIT_WRITES_PER_MIN: ${RATE_LIMIT_WRITES_PER_MIN:-60}
+  RATE_LIMIT_PUBLIC_VIEWS_PER_MIN: ${RATE_LIMIT_PUBLIC_VIEWS_PER_MIN:-600}
 
 services:
   postgres:

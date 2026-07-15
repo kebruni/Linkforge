@@ -1,5 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
-import { safeHref } from "@/lib/url-safety";
+import { safeHref } from "@/lib/safe-href";
 
 export function LinkBlock({
   id,

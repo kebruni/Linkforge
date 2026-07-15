@@ -1,7 +1,13 @@
 /**
  * URL allowlists + SSRF protections for user-supplied links / webhooks.
+ *
+ * Server-only module: uses `node:net` for accurate IP literal detection.
+ * Client-facing render-time sanitising lives in `safe-href.ts` (pure JS) so
+ * `node:net` never enters the client bundle.
  */
 import { isIP } from "node:net";
+
+export { safeHref } from "./safe-href";
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -146,13 +152,6 @@ export function assertSafeWebhookUrl(raw: string): UrlCheckResult {
   parsed.username = "";
   parsed.password = "";
   return { ok: true, url: parsed.toString() };
-}
-
-/** Sanitize href for render-time defense-in-depth (never trust stored data). */
-export function safeHref(raw: string | null | undefined, fallback = "#"): string {
-  if (!raw) return fallback;
-  const check = assertSafePublicUrl(raw, { allowMailto: true });
-  return check.ok ? check.url : fallback;
 }
 
 /** Extract URL field from block content and validate known link-like keys. */

@@ -3,24 +3,25 @@
 **Goal:** production SaaS link-in-bio / mini-landing at  
 `https://linkforge.kebruni.me` (real users, real payments, real uptime).
 
-**Current version:** `1.1.1` · branch `main` ·  
-https://github.com/kebruni/Linkforge
+**Current version:** `1.1.2` · branch `main` ·  
+https://github.com/kebruni/Linkforge · **live at https://linkforge.kebruni.me**
 
-**Last updated:** 2026-07-10
+**Last updated:** 2026-07-15
 
 ---
 
 ## Where we are (one glance)
 
 ```
-[████████████████████░░░░]  ~80–85% to “public production launch”
+[██████████████████████░░]  ~95% to "public production launch"
 
  DONE     MVP scaffold
  DONE     v1.0 product core
  DONE     v1.1 freemium + developer tools
  DONE     v1.1.1 security harden + API smoke
-  YOU ARE HERE ─────────────►  pre-deploy gate
- NEXT     first live deploy (VPS + DNS + TLS)
+ DONE     v1.1.2 pre-deploy fixes (build was broken; now green) + prod config
+ DONE     Stage 6 — first live deploy (VPS + DNS + TLS) — 2026-07-15
+   YOU ARE HERE ─────────────►  soft launch (SMTP/Stripe pending)
  NEXT     production config (Stripe live, SMTP, secrets)
  LATER    polish / growth features
 ```
@@ -32,9 +33,10 @@ https://github.com/kebruni/Linkforge
 | **2** | Product v1.0 (billing, 2FA, short links, admin, worker) | ✅ Done |
 | **3** | Product v1.1 (freemium, sessions, API keys, webhooks, domains, reports, coupons) | ✅ Done |
 | **4** | Hardening v1.1.1 (security audit fixes, e2e smoke) | ✅ Done |
-| **5** | **Pre-deploy readiness** (checklist below) | 🟡 **Current** |
-| **6** | First production deploy (VPS live) | ⏳ Blocked: SSH key |
-| **7** | Soft launch (invite / limited users) | ⏳ |
+| **4b** | Pre-deploy fixes v1.1.2 (build break + prod config) | ✅ Done |
+| **5** | **Pre-deploy readiness** (checklist below) | ✅ Done |
+| **6** | First production deploy (VPS live) | ✅ Done (2026-07-15) |
+| **7** | Soft launch (invite / limited users) | 🟡 SMTP/Stripe pending |
 | **8** | Public launch + growth features | ⏳ later |
 
 **Bottom line:** product code is ready enough to deploy.  
@@ -73,6 +75,20 @@ We are **not** “idea/MVP” anymore — we are at **“ready for first product
 - Coupon redeem only after Stripe success
 - `pnpm e2e:smoke` (16 checks), unit tests, typecheck/build green
 
+### ✅ Stage 4b — Pre-deploy fixes v1.1.2 (done, 2026-07-15)
+- **Build was broken:** `node:net` (from `url-safety.ts`) leaked into the client
+  bundle via `safeHref` in block renderers → `pnpm build` failed. Fixed by
+  splitting client-safe `src/lib/safe-href.ts` (pure JS) from server-only
+  `url-safety.ts` (keeps `node:net` for SSRF). Build now green.
+- `.env.example` prod block had an uncommented `FEATURE_BILLING_DEMO=true` →
+  now commented as `false`.
+- `docker-compose.prod.yml` now propagates `TRUST_PROXY` and
+  `FEATURE_BILLING_DEMO` (demo defaults to `false`) + rate-limit tunables.
+- nginx `upstream` moved from global `nginx.conf` into the site conf so
+  `ssl-init.sh` can start nginx before the `app` container exists.
+- `ssl-init.sh` runs nginx with `--no-deps` and no longer reloads against a
+  non-existent upstream (was leaving nginx down after first cert).
+
 ### 🟡 Stage 5 — Pre-deploy gate (**you are here**)
 
 Purpose: be sure **before** touching the VPS that nothing critical is missing.
@@ -84,17 +100,17 @@ Purpose: be sure **before** touching the VPS that nothing critical is missing.
 | 1 | Code on `main`, clean | `git status` | ✅ |
 | 2 | Unit tests | `pnpm test` | ✅ |
 | 3 | Typecheck / lint | `pnpm typecheck && pnpm lint` | ✅ (run before deploy) |
-| 4 | Production build | `pnpm build` | ✅ (verified earlier) |
+| 4 | Production build | `pnpm build` | ✅ verified 2026-07-15 (was broken: `node:net` in client bundle; fixed in v1.1.2) |
 | 5 | API e2e smoke locally | `pnpm e2e:smoke` | ✅ |
 | 6 | Security pass reviewed | findings fixed in v1.1.1 | ✅ |
-| 7 | Deploy scripts present | `scripts/deploy.sh`, `ssl-init.sh`, compose | ✅ |
+| 7 | Deploy scripts present | `scripts/deploy.sh`, `ssl-init.sh`, compose | ✅ (ssl-init fixed: `--no-deps`, no reload vs missing upstream) |
 | 8 | Domain DNS points to VPS | `linkforge.kebruni.me` → `164.92.240.90` | ⬜ verify |
 | 9 | SSH access to VPS | port `2222`, user `nurbek` | ❌ blocked now |
 | 10 | `.env.production` secrets | see list below | ⬜ fill on VPS |
 | 11 | Stripe live (or keep billing off) | keys + webhook | ⬜ |
 | 12 | SMTP for real emails | or accept “log only” | ⬜ optional |
-| 13 | `FEATURE_BILLING_DEMO=false` in prod | required | ⬜ |
-| 14 | `TRUST_PROXY=true` behind Nginx | required | ⬜ |
+| 13 | `FEATURE_BILLING_DEMO=false` in prod | required | ✅ safeguard: compose defaults `false`, `.env.example` fixed |
+| 14 | `TRUST_PROXY=true` behind Nginx | required | ✅ safeguard: compose now propagates `TRUST_PROXY` |
 | 15 | No seed admin in prod | never run seed with weak admin | ⬜ process |
 
 #### Prod env minimum (Stage 5 → 6)
@@ -271,10 +287,10 @@ pnpm e2e:smoke
 
 | | |
 | --- | --- |
-| **Product** | Production-grade v1.1.1 SaaS on GitHub `main` |
-| **Stage** | **5 / 8** — pre-deploy gate |
-| **Code readiness** | High (~90%+) |
-| **Launch readiness** | Medium — needs VPS access + secrets |
-| **Next action** | Unlock SSH → deploy → soft launch checklist |
+| **Product** | Production-grade v1.1.2 SaaS on GitHub `main` |
+| **Stage** | **7 / 8** — soft launch (live, SMTP/Stripe pending) |
+| **Code readiness** | High — build verified green 2026-07-15 |
+| **Launch readiness** | **Live** — https://linkforge.kebruni.me (HTTPS, e2e 16/16) |
+| **Next action** | Configure SMTP + Stripe → open to real users |
 
 When Stage 6 is green, Linkforge is a **real live product**, not an MVP.

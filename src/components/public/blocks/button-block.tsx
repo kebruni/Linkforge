@@ -1,4 +1,4 @@
-import { safeHref } from "@/lib/url-safety";
+import { safeHref } from "@/lib/safe-href";
 
 export function ButtonBlock({
   id,

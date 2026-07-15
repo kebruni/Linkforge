@@ -5,19 +5,37 @@
 > this top-to-bottom before doing anything. Then read `ARCHITECTURE.md` (system
 > design) and `DEPLOYMENT.md` (VPS guide).
 
-Last updated: **2026-07-10** (v1.1.1 security + e2e smoke).
+Last updated: **2026-07-15** (v1.1.2 — deployed to production).
 
 ---
 
 ## 0. TL;DR
 
 - Goal: **production link-in-bio / mini-landing SaaS** branded **Linkforge**,
-  target deploy `https://linkforge.kebruni.me`
-  (VPS `164.92.240.90`, SSH `:2222`, deploy user `nurbek`).
-- Status: **v1.1.1 on `main`** — full product surface + security hardening pass
-  (URL allowlists, private pages, rate-limit anti-spoof, demo single-use,
-  freemium race lock, webhook SSRF blocks) + API e2e smoke script.
-- **Live VPS cutover** still needs SSH key for `nurbek@164.92.240.90:2222`.
+  live at **`https://linkforge.kebruni.me`**
+  (VPS `164.92.240.90`, SSH `:2222`, deploy user `nurbe`).
+- Status: **v1.1.2 deployed to production** — full product surface + security
+  hardening + live HTTPS deploy with valid Let's Encrypt cert.
+- **Pre-deploy fixes (2026-07-15):** the production `pnpm build` was actually
+  broken (`node:net` from `url-safety.ts` leaked into the client bundle via
+  `safeHref` in block renderers) — fixed by splitting client-safe
+  `src/lib/safe-href.ts` (pure JS) from the server-only `url-safety.ts`. Also
+  fixed: `.env.example` prod block had an uncommented `FEATURE_BILLING_DEMO=true`
+  (now `false`); `docker-compose.prod.yml` did not propagate `TRUST_PROXY` /
+  `FEATURE_BILLING_DEMO` to the container (now wired, demo defaults to `false`);
+  nginx `upstream` lived in global `nginx.conf` so `ssl-init.sh` could not start
+  nginx before the `app` container existed (moved upstream into the site conf);
+  `ssl-init.sh` now runs nginx with `--no-deps` and no longer reloads against a
+  non-existent upstream. All gates green: `lint`, `typecheck`, `test` (29),
+  `build` (+ worker).
+- **Production deploy (2026-07-15):** Docker image built locally, transferred
+  to VPS, app + worker containers running on existing Docker network with
+  existing Postgres 16 + Redis 7 containers. Host nginx reverse-proxies
+  `linkforge.kebruni.me` → `127.0.0.1:3001`. SSL via certbot (Let's Encrypt,
+  auto-renew). E2E smoke: 16/16 passed on production. Admin user created
+  (`admin@kebruni.me`). Backup cron at 3am daily, 14-day retention.
+- **Remaining for full business readiness:** SMTP config (email verify/reset),
+  Stripe live keys (billing currently off), OAuth provider keys (Google/GitHub).
 
 ---
 
@@ -78,10 +96,14 @@ pnpm security:audit         # optional stress harness
 
 ## 4. Infra
 
-- VPS: `164.92.240.90:2222` user `nurbek` → `/srv/linkforge`
-- Domain: `linkforge.kebruni.me`
+- VPS: `164.92.240.90:2222` user `nurbe` → `/srv/linkforge`
+- Domain: `linkforge.kebruni.me` (live, HTTPS, Let's Encrypt)
+- Prod: Docker image `linkforge:latest` → app (`127.0.0.1:3001`) + worker
+  on existing `docker_linkforge-network` with existing Postgres 16 + Redis 7
+- Host nginx reverse-proxies `linkforge.kebruni.me` → `127.0.0.1:3001`
 - Local: Postgres host `:5433`, `pnpm dev` + `pnpm worker`
-- Seed: `admin@linkforge.local` / `password123` (**dev only**)
+- Admin: `admin@kebruni.me` (created on prod, promoted to ADMIN)
+- Backup: cron `0 3 * * *` → `/srv/linkforge/backups/`, 14-day retention
 
 GitHub: `https://github.com/kebruni/Linkforge` default branch **`main`**.
 
@@ -94,6 +116,7 @@ GitHub: `https://github.com/kebruni/Linkforge` default branch **`main`**.
 | URL / SSRF safety | `src/lib/url-safety.ts` |
 | Client IP | `src/lib/client-ip.ts` |
 | Page unlock | `src/lib/page-unlock.ts` |
+| Client-safe href sanitiser | `src/lib/safe-href.ts` (pure JS, no `node:net`) |
 | Plan gates | `src/lib/plan.ts` |
 | Demo pay tokens | `src/lib/billing-demo.ts` |
 | E2E smoke | `scripts/e2e-smoke.mjs` |

@@ -47,8 +47,9 @@ if [[ -f "${PROD_CONF}" ]]; then
   mv "${PROD_CONF}" "${PROD_CONF_DISABLED}"
 fi
 
-# Nginx only for ACME — app stack can come up after certs exist.
-"${COMPOSE[@]}" up -d nginx
+# Nginx only for ACME — app stack comes up later via deploy.sh. --no-deps so
+# we don't try to build/start `app` (and its postgres/redis) before certs exist.
+"${COMPOSE[@]}" up -d --no-deps nginx
 
 echo "==> Requesting certificate for ${DOMAIN}"
 "${COMPOSE[@]}" run --rm certbot certonly \
@@ -62,6 +63,10 @@ if [[ -f "${PROD_CONF_DISABLED}" ]]; then
   mv "${PROD_CONF_DISABLED}" "${PROD_CONF}"
 fi
 
-"${COMPOSE[@]}" exec nginx nginx -t
-"${COMPOSE[@]}" exec nginx nginx -s reload || "${COMPOSE[@]}" restart nginx
+# Do NOT reload nginx with the prod config here: the prod site conf references
+# the `app` upstream which is not running yet (deploy.sh starts it). Stop nginx
+# so it doesn't keep serving the HTTP-only _init config; deploy.sh will start
+# it fresh with the app stack and the real TLS config.
+"${COMPOSE[@]}" stop nginx >/dev/null 2>&1 || true
 echo "==> SSL ready for https://${DOMAIN}"
+echo "    Now run: bash scripts/deploy.sh  (starts app + worker + nginx with TLS)"
