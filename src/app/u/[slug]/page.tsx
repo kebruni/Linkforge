@@ -121,7 +121,7 @@ export default async function PublicPage({ params }: Params) {
           `.trim(),
         }}
       />
-      <Script id="ld-json" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
+      <Script id="ld-json" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
     </>
   );
 }
