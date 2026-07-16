@@ -67,19 +67,6 @@ pnpm e2e:smoke     # 16 API checks (requires running app)
 
 ---
 
-## Production deploy
-
-**Live:** `https://linkforge.kebruni.me` (VPS `164.92.240.90:2222`, user `nurbe`)
-
-```bash
-# On the VPS:
-cp .env.example .env.production    # fill POSTGRES_PASSWORD, AUTH_SECRET, APP_URL, TRUST_PROXY=true
-EMAIL=admin@kebruni.me bash scripts/ssl-init.sh
-bash scripts/deploy.sh
-```
-
-See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the full guide, [`ARCHITECTURE.md`](./ARCHITECTURE.md) for system design, [`ROADMAP.md`](./ROADMAP.md) for project status.
-
 ---
 
 ## Project structure

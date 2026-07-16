@@ -58,3 +58,6 @@ test-results/
 # Misc
 *.pem
 *.key
+
+# Deployment guide (internal)
+DEPLOYMENT.md
