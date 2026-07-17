@@ -141,7 +141,7 @@ export default function LandingPage() {
             </Badge>
             <h1 className="text-balance text-[2.15rem] font-semibold leading-[1.1] tracking-tight sm:text-5xl md:text-7xl">
               One link.
-              <span className="bg-gradient-to-r from-accent to-fuchsia-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-pink-400 bg-clip-text text-transparent">
                 {" "}
                 Your whole world.
               </span>
@@ -280,7 +280,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-t bg-gradient-to-br from-accent/15 via-fuchsia-500/10 to-cyan-500/10 py-14 sm:py-20 md:py-24">
+      <section className="border-t bg-gradient-to-br from-indigo-500/8 via-pink-400/6 to-amber-400/8 py-14 sm:py-20 md:py-24">
         <div className="container max-w-3xl text-center">
           <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
             Build a page that converts in under a minute.

@@ -15,7 +15,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
       </div>
       <div className="relative hidden lg:block">
-        <div className="absolute inset-0 bg-gradient-to-br from-accent via-fuchsia-500 to-cyan-500" />
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-violet-500 to-pink-400" />
         <div className="grid-bg absolute inset-0 mix-blend-overlay opacity-60" />
         <div className="relative flex h-full flex-col justify-end p-10 text-white">
           <p className="max-w-md text-balance text-2xl font-medium leading-relaxed">
